@@ -64,6 +64,58 @@ def draw_yolo_world_boxes(frame, query: str):
         print(f"[YOLO-World Error] Failed to run prediction: {e}")
     return frame
 
+def fmt_ts(sec: float) -> str:
+    h = int(sec // 3600)
+    m = int((sec % 3600) // 60)
+    s = int(sec % 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+def annotate_preview_image(frame, match_index: int, timestamp: float):
+    img = frame.copy()
+    h, w = img.shape[:2]
+    
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    text = f"Match {match_index}"
+    text_scale = 0.45
+    thickness = 1
+    (tw, th), baseline = cv2.getTextSize(text, font, text_scale, thickness)
+    pad_x, pad_y = 8, 6
+    rect_x1, rect_y1 = 12, 12
+    rect_x2, rect_y2 = 12 + tw + 2*pad_x, 12 + th + 2*pad_y
+    cv2.rectangle(img, (rect_x1, rect_y1), (int(rect_x2), int(rect_y2)), (235, 99, 37), -1)
+    cv2.putText(img, text, (rect_x1 + pad_x, rect_y1 + th + pad_y), font, text_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    
+    ts_str = fmt_ts(timestamp)
+    (ts_w, ts_h), ts_base = cv2.getTextSize(ts_str, font, text_scale, thickness)
+    margin = 12
+    trect_x1 = w - ts_w - 2*pad_x - margin
+    trect_y1 = h - ts_h - 2*pad_y - margin
+    trect_x2 = w - margin
+    trect_y2 = h - margin
+    
+    overlay = img.copy()
+    cv2.rectangle(overlay, (int(trect_x1), int(trect_y1)), (int(trect_x2), int(trect_y2)), (0, 0, 0), -1)
+    alpha = 0.5
+    cv2.addWeighted(overlay, alpha, img, 1.0 - alpha, 0, img)
+    cv2.putText(img, ts_str, (int(trect_x1 + pad_x), int(trect_y1 + ts_h + pad_y)), font, text_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    
+    return img
+
+empty_meta = """
+<div class="meta-row">
+    <span class="score-badge">Score --</span>
+    <span class="frame-badge">Frame --</span>
+</div>
+"""
+
+def make_meta_html(score: float, frame_idx: int):
+    return f"""
+    <div class="meta-row">
+        <span class="score-badge">Score {score:.3f}</span>
+        <span class="frame-badge">Frame #{frame_idx}</span>
+    </div>
+    """
+
 # Warm up CLIP and Whisper models on the main thread to prevent thread-safety crashes on Windows
 try:
     print("[Demo Startup] Warming up CLIP text encoder...")
@@ -704,8 +756,9 @@ def search_and_retrieve(query: str, clip_duration: float, use_dynamic_duration: 
     WEAK_THRESHOLD   = 0.22
 
     _NO_MATCH_OUTPUTS = (
-        None,
-        [],
+        None, empty_meta,
+        None, empty_meta,
+        None, empty_meta,
         gr.Video(value=None, label="Match 1 Clip", visible=False),
         gr.Video(value=None, label="Match 2 Clip", visible=False),
         gr.Video(value=None, label="Match 3 Clip", visible=False),
@@ -715,7 +768,7 @@ def search_and_retrieve(query: str, clip_duration: float, use_dynamic_duration: 
         return (
             "### ❌ No Matches Found\n"
             f"The query **\"{query}\"** did not match anything in the indexed video.",
-            *_NO_MATCH_OUTPUTS[1:],
+            *_NO_MATCH_OUTPUTS,
         )
 
     best_sim = results[0].similarity
@@ -724,17 +777,16 @@ def search_and_retrieve(query: str, clip_duration: float, use_dynamic_duration: 
             f"### ❌ No Confident Match for \"{query}\"\n"
             f"Best similarity found: **{best_sim*100:.1f}%** — below the confidence threshold.\n\n"
             "This query does not appear in the indexed video. Try a different search term.",
-            [],
-            gr.Video(value=None, label="Match 1 Clip", visible=False),
-            gr.Video(value=None, label="Match 2 Clip", visible=False),
-            gr.Video(value=None, label="Match 3 Clip", visible=False),
+            *_NO_MATCH_OUTPUTS,
         )
         
-    # Generate matching visual previews
-    previews = []
+    # Format match card images & metadata
+    match_img_paths = [None, None, None]
+    match_metas = [empty_meta, empty_meta, empty_meta]
     os.makedirs("demo_previews", exist_ok=True)
     
-    for i, r in enumerate(results):
+    for i in range(min(3, len(results))):
+        r = results[i]
         cap = cv2.VideoCapture(r.video_path)
         cap.set(cv2.CAP_PROP_POS_FRAMES, r.frame_idx)
         ret, frame = cap.read()
@@ -742,9 +794,11 @@ def search_and_retrieve(query: str, clip_duration: float, use_dynamic_duration: 
         
         if ret:
             annotated = draw_yolo_world_boxes(frame, query)
+            final_img = annotate_preview_image(annotated, i + 1, r.timestamp)
             preview_path = os.path.join("demo_previews", f"match_{i}_{r.timestamp:.1f}.jpg")
-            cv2.imwrite(preview_path, annotated)
-            previews.append((preview_path, f"{r.timestamp:.1f}s (Match: {r.similarity * 100:.1f}%)"))
+            cv2.imwrite(preview_path, final_img)
+            match_img_paths[i] = preview_path
+            match_metas[i] = make_meta_html(r.similarity, r.frame_idx)
             
     # Extract video clips for top 3 results
     clip_paths = [None, None, None]
@@ -794,7 +848,9 @@ def search_and_retrieve(query: str, clip_duration: float, use_dynamic_duration: 
         
     return (
         output_text,
-        previews,
+        match_img_paths[0], match_metas[0],
+        match_img_paths[1], match_metas[1],
+        match_img_paths[2], match_metas[2],
         gr.Video(value=clip_paths[0], label=labels[0], visible=visibilities[0]),
         gr.Video(value=clip_paths[1], label=labels[1], visible=visibilities[1]),
         gr.Video(value=clip_paths[2], label=labels[2], visible=visibilities[2])
@@ -943,7 +999,7 @@ def chatbot_rag_answer(question: str, history: list):
 def chatbot_chat_flow(message: str, history: list, clip_duration: float, use_dynamic_duration: bool, min_similarity: float):
     """Handles Chatbot queries, updates conversational history, and refreshes video clip players and preview gallery."""
     if not message.strip():
-        return "", history, [], gr.Video(value=None, visible=False), gr.Video(value=None, visible=False), gr.Video(value=None, visible=False)
+        return "", history, None, empty_meta, None, empty_meta, None, empty_meta, gr.Video(value=None, visible=False), gr.Video(value=None, visible=False), gr.Video(value=None, visible=False)
         
     # 1. Get answer from the conversational RAG engine
     answer = chatbot_rag_answer(message, history)
@@ -959,23 +1015,27 @@ def chatbot_chat_flow(message: str, history: list, clip_duration: float, use_dyn
         if not any(abs(r.timestamp - accepted.timestamp) < 8.0 for accepted in deduped_results):
             deduped_results.append(r)
             
-    previews = []
+    match_img_paths = [None, None, None]
+    match_metas = [empty_meta, empty_meta, empty_meta]
     clip_paths = [None, None, None]
     labels = ["Match 1 Clip", "Match 2 Clip", "Match 3 Clip"]
     visibilities = [False, False, False]
     
     if active_video_path and deduped_results:
         os.makedirs("demo_previews", exist_ok=True)
-        for i, r in enumerate(deduped_results[:5]):
+        for i in range(min(3, len(deduped_results))):
+            r = deduped_results[i]
             cap = cv2.VideoCapture(r.video_path)
             cap.set(cv2.CAP_PROP_POS_FRAMES, r.frame_idx)
             ret, frame = cap.read()
             cap.release()
             if ret:
                 annotated = draw_yolo_world_boxes(frame, message)
+                final_img = annotate_preview_image(annotated, i + 1, r.timestamp)
                 preview_path = os.path.join("demo_previews", f"chat_match_{i}_{r.timestamp:.1f}.jpg")
-                cv2.imwrite(preview_path, annotated)
-                previews.append((preview_path, f"{r.timestamp:.1f}s (Match: {r.similarity * 100:.1f}%)"))
+                cv2.imwrite(preview_path, final_img)
+                match_img_paths[i] = preview_path
+                match_metas[i] = make_meta_html(r.similarity, r.frame_idx)
                 
         # Extract clips for top 3 matching moments
         for i in range(min(3, len(deduped_results))):
@@ -1016,7 +1076,9 @@ def chatbot_chat_flow(message: str, history: list, clip_duration: float, use_dyn
     return (
         "",  # clear the input textbox
         updated_history,
-        previews,
+        match_img_paths[0], match_metas[0],
+        match_img_paths[1], match_metas[1],
+        match_img_paths[2], match_metas[2],
         gr.Video(value=clip_paths[0], label=labels[0], visible=visibilities[0]),
         gr.Video(value=clip_paths[1], label=labels[1], visible=visibilities[1]),
         gr.Video(value=clip_paths[2], label=labels[2], visible=visibilities[2])
@@ -1024,261 +1086,474 @@ def chatbot_chat_flow(message: str, history: list, clip_duration: float, use_dyn
 
 
 def clear_chat():
-    return [], "", []
+    return [], "", None, empty_meta, None, empty_meta, None, empty_meta
 
 
 # ── Gradio Theme & Custom CSS ───────────────────────────────────────────────────
 
 custom_css = """
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 /* Apply premium font globally */
 * {
-    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 
 body, .gradio-container {
-    background: radial-gradient(circle at top right, #111827, #0b0f17) !important;
-    color: #f3f4f6 !important;
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
 }
 
-/* Glassmorphism containers */
-.glass-panel {
-    background: rgba(17, 24, 39, 0.45) !important;
-    backdrop-filter: blur(16px) !important;
-    -webkit-backdrop-filter: blur(16px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.07) !important;
-    border-radius: 16px !important;
+/* Panel cards styling */
+.panel-card {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
     padding: 24px !important;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03) !important;
     margin-bottom: 20px !important;
 }
 
-/* Sidebar and Panel headings */
+/* Headings */
 .pane-title {
-    font-size: 1.25rem !important;
+    font-size: 1.15rem !important;
     font-weight: 700 !important;
-    background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    margin-bottom: 12px !important;
-    letter-spacing: -0.01em !important;
+    color: #0f172a !important;
+    margin-bottom: 16px !important;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-/* Tabs style custom adjustment */
+/* Tabs style */
 .tabs {
-    background: rgba(15, 23, 42, 0.4) !important;
-    border: 1px solid rgba(255, 255, 255, 0.05) !important;
-    border-radius: 12px !important;
-    padding: 6px !important;
+    background: #f1f5f9 !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    padding: 4px !important;
 }
 
 .tabitem {
     background: transparent !important;
     border: none !important;
-    padding: 16px 8px !important;
+    padding: 12px 6px !important;
 }
 
-/* Tab button styling */
 .tabs button.selected {
-    background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%) !important;
-    color: white !important;
+    background: #ffffff !important;
+    color: #2563eb !important;
     font-weight: 600 !important;
-    border-radius: 8px !important;
-    box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3) !important;
+    border-radius: 6px !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08) !important;
+    border: 1px solid #e2e8f0 !important;
 }
 
-/* Custom Primary Buttons with Neon Glow */
+/* Buttons styling */
 button.primary-btn {
-    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%) !important;
+    background: #2563eb !important;
     border: none !important;
     color: white !important;
     font-weight: 600 !important;
-    border-radius: 8px !important;
+    border-radius: 6px !important;
     padding: 10px 20px !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    box-shadow: 0 4px 14px rgba(59, 130, 246, 0.2) !important;
+    transition: background-color 0.2s ease !important;
 }
 
 button.primary-btn:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4) !important;
-    filter: brightness(1.1) !important;
+    background: #1d4ed8 !important;
 }
 
 button.secondary-btn {
-    background: rgba(255, 255, 255, 0.07) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    color: #e5e7eb !important;
-    border-radius: 8px !important;
+    background: #f1f5f9 !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #475569 !important;
+    border-radius: 6px !important;
     font-weight: 500 !important;
     transition: all 0.2s ease !important;
 }
 
 button.secondary-btn:hover {
-    background: rgba(255, 255, 255, 0.15) !important;
-    color: white !important;
+    background: #e2e8f0 !important;
+    color: #0f172a !important;
 }
 
-/* Stats/Widget Container */
-.stats-card {
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(124, 58, 237, 0.08) 100%) !important;
-    border: 1px solid rgba(99, 102, 241, 0.25) !important;
-    border-radius: 12px !important;
-    padding: 18px !important;
-}
-
-/* Input Elements formatting */
+/* Input Elements */
 input, textarea, select {
-    background: rgba(15, 23, 42, 0.75) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    border-radius: 8px !important;
-    color: #f9fafb !important;
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    color: #0f172a !important;
 }
 
 input:focus, textarea:focus {
-    border-color: #6366f1 !important;
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1) !important;
 }
 
-/* Badges for confidence metrics */
-.badge {
-    background: rgba(16, 185, 129, 0.15) !important;
-    color: #34d399 !important;
-    border: 1px solid rgba(16, 185, 129, 0.3) !important;
-    padding: 2px 8px !important;
+/* Badges */
+.score-badge {
+    background: #ecfdf5 !important;
+    color: #059669 !important;
+    border: 1px solid #a7f3d0 !important;
+    padding: 4px 10px !important;
     border-radius: 9999px !important;
     font-size: 0.75rem !important;
+    font-weight: 600 !important;
+}
+
+.frame-badge {
+    background: #f1f5f9 !important;
+    color: #475569 !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 4px 10px !important;
+    border-radius: 9999px !important;
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+}
+
+.meta-row {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* Match Card Container */
+.match-card {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    padding: 8px !important;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Stats list */
+.stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.stats-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 0.88rem;
+}
+
+.stats-item span {
+    color: #475569;
+}
+
+.stats-item strong {
+    color: #0f172a;
+    font-weight: 600;
+}
+
+.stats-item strong.highlight-val {
+    color: #2563eb;
+}
+
+/* Illustration floating shapes */
+.illustration-container {
+    position: relative;
+    width: 100%;
+    height: 120px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.floating-card {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: 10px;
+    padding: 8px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+.search-card {
+    top: 5px;
+    left: 10px;
+    transform: rotate(-8deg);
+}
+
+.play-card {
+    top: 35px;
+    right: 20px;
+    border-radius: 50%;
+    padding: 8px;
+    transform: rotate(6deg);
+}
+
+.chat-card {
+    bottom: 5px;
+    left: 60px;
+    transform: rotate(10deg);
 }
 """
 
+def get_dynamic_stats():
+    try:
+        total = search_index.db.execute("SELECT COUNT(*) FROM frames").fetchone()[0]
+        anchors = search_index.db.execute("SELECT COUNT(*) FROM frames WHERE is_anchor=1").fetchone()[0]
+        trans = search_index.db.execute("SELECT COUNT(*) FROM transcripts").fetchone()[0]
+        ocr_count = search_index.db.execute("SELECT COUNT(*) FROM ocr_text").fetchone()[0]
+        
+        cursor = search_index.db.execute("SELECT COUNT(DISTINCT video_path) FROM frames")
+        videos_count = cursor.fetchone()[0]
+    except Exception:
+        total, anchors, trans, ocr_count, videos_count = 0, 0, 0, 0, 0
+        
+    return f"""
+    <div class="stats-list">
+        <div class="stats-item"><span>Total Embeddings</span><strong class="highlight-val">{total:,}</strong></div>
+        <div class="stats-item"><span>Anchor (CLIP)</span><strong>{anchors:,}</strong></div>
+        <div class="stats-item"><span>Delta (approx.)</span><strong>{(total - anchors):,}</strong></div>
+        <div class="stats-item"><span>Transcripts (Segments)</span><strong>{trans:,}</strong></div>
+        <div class="stats-item"><span>OCR Text Chunks</span><strong>{ocr_count:,}</strong></div>
+        <div class="stats-item"><span>Videos Indexed</span><strong>{videos_count:,}</strong></div>
+    </div>
+    """
+
 with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
+    # ── Navbar ──
     gr.HTML("""
-    <div style="text-align: center; margin-bottom: 24px; padding-top: 15px;">
-        <h1 style="font-size: 36px; font-weight: 800; background: linear-gradient(to right, #60a5fa, #a78bfa, #f472b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 6px;">ADVE — Semantic Video RAG & Chatbot</h1>
-        <p style="font-size: 15px; color: #9ca3af; max-width: 850px; margin: 0 auto; line-height: 1.5;">
-            Anchor-Delta Video Embedding (ADVE) reduces neural vision network calls by up to 90% via motion-adaptive keyframe processing, facilitating fast indexing, zero-latency semantic search, and conversational RAG.
-        </p>
+    <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; border-bottom: 1px solid #e2e8f0; padding: 12px 24px; margin: -16px -16px 24px -16px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L2 22H22L12 2Z" fill="#2563eb"/>
+            </svg>
+            <span style="font-size: 20px; font-weight: 800; color: #2563eb; letter-spacing: -0.02em;">ADVE</span>
+        </div>
+        <div style="display: flex; gap: 24px; font-weight: 500;">
+            <a href="#" style="color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 4px;">Overview</a>
+            <a href="#" style="color: #475569;">Search</a>
+            <a href="#" style="color: #475569;">Chat</a>
+            <a href="#" style="color: #475569;">Docs</a>
+            <a href="https://github.com/asmitha2025/ADVE" target="_blank" style="color: #475569; display: flex; align-items: center; gap: 4px;">
+                GitHub <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+            </a>
+        </div>
+        <div style="display: flex; align-items: center; gap: 16px;">
+            <button style="background: none; border: none; cursor: pointer; color: #475569;">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m11.314 11.314l.707.707M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/></svg>
+            </button>
+            <button style="background: #2563eb; color: #ffffff; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                Start Indexing
+            </button>
+        </div>
     </div>
     """)
-    
+
+    # ── Hero Section ──
     with gr.Row():
-        # --- LEFT PANE: Inputs, Search & Chatbot ---
-        with gr.Column(scale=5, elem_classes="glass-panel"):
-            gr.HTML("<h2 class='pane-title'>📥 1. Video Ingestion & Indexing</h2>")
-            
-            with gr.Tabs(elem_classes="tabs"):
-                # --- YouTube Tab ---
-                with gr.TabItem("YouTube Video Link"):
-                    yt_url = gr.Textbox(label="YouTube Link", placeholder="https://www.youtube.com/watch?v=aircAruvnKk")
-                    with gr.Row():
-                        yt_fps = gr.Slider(label="Sampling Rate (FPS)", minimum=0.1, maximum=10.0, value=5.0, step=0.1)
-                        yt_adaptive = gr.Checkbox(label="Adaptive FPS (Motion-Based)", value=True)
-                    with gr.Row():
-                        yt_index_audio = gr.Checkbox(label="Index Dialogue (Whisper Audio)", value=False, info="Required for dialogue RAG search. (Slow on CPUs)")
-                        yt_index_ocr = gr.Checkbox(label="Index Screen Text (EasyOCR)", value=False, info="Required for on-screen text search. (Slow on CPUs)")
-                    yt_index_btn = gr.Button("Download & Index Video", variant="primary", elem_classes="primary-btn")
-                    yt_status = gr.Textbox(label="Status / Progress Summary", interactive=False, placeholder="Paste a link and click Index...")
+        with gr.Column(scale=7):
+            gr.HTML("""
+            <h1 style="font-size: 32px; font-weight: 800; color: #0f172a; margin-bottom: 8px; letter-spacing: -0.03em;">ADVE — Semantic Video Search & Chatbot</h1>
+            <p style="font-size: 15px; color: #475569; max-width: 850px; line-height: 1.6; margin: 0; margin-bottom: 24px;">
+                Anchor-Delta Video Embedding (ADVE) reduces neural vision network calls by up to 90% via motion-adaptive keyframe processing for semantic scene search and video Q&A.
+            </p>
+            """)
+        with gr.Column(scale=3):
+            gr.HTML("""
+            <div class="illustration-container">
+                <div class="floating-card search-card">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                </div>
+                <div class="floating-card play-card">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#2563eb"><path d="M8 5v14l11-7z"/></svg>
+                </div>
+                <div class="floating-card chat-card">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+            </div>
+            """)
+
+    with gr.Row():
+        # ── COLUMN 1: Ingestion & Search ──
+        with gr.Column(scale=3):
+            # Ingestion Card
+            with gr.Column(elem_classes="panel-card"):
+                gr.HTML("<h2 class='pane-title'>1. Video Ingestion & Indexing</h2>")
+                with gr.Tabs(elem_classes="tabs"):
+                    with gr.TabItem("YouTube URL"):
+                        yt_url = gr.Textbox(show_label=False, placeholder="https://www.youtube.com/watch?v=...", container=False)
+                        with gr.Row():
+                            yt_fps = gr.Slider(label="Sampling Rate (FPS)", minimum=0.1, maximum=10.0, value=5.0, step=0.1)
+                            yt_adaptive = gr.Checkbox(label="Adaptive FPS", value=True)
+                        with gr.Row():
+                            yt_index_audio = gr.Checkbox(label="Whisper", value=False)
+                            yt_index_ocr = gr.Checkbox(label="EasyOCR", value=False)
+                        yt_index_btn = gr.Button("Index Video", variant="primary", elem_classes="primary-btn")
+                        yt_status = gr.Textbox(label="Indexing Output Status", interactive=False, placeholder="Waiting to index...")
+                        
+                    with gr.TabItem("Local Upload"):
+                        local_file = gr.File(label="Upload Video File", file_types=["video"])
+                        with gr.Row():
+                            local_fps = gr.Slider(label="Sampling Rate (FPS)", minimum=0.1, maximum=10.0, value=5.0, step=0.1)
+                            local_adaptive = gr.Checkbox(label="Adaptive FPS", value=True)
+                        with gr.Row():
+                            local_index_audio = gr.Checkbox(label="Whisper", value=False)
+                            local_index_ocr = gr.Checkbox(label="EasyOCR", value=False)
+                        local_index_btn = gr.Button("Index Video", variant="primary", elem_classes="primary-btn")
+                        local_status = gr.Textbox(label="Indexing Output Status", interactive=False, placeholder="Waiting to index...")
+
+            # Search Card
+            with gr.Column(elem_classes="panel-card"):
+                gr.HTML("<h2 class='pane-title'>3. Semantic Scene Search</h2>")
+                gr.HTML("<p style='font-size: 13px; color: #475569; margin-top: -8px; margin-bottom: 12px;'>Describe the scene you're looking for</p>")
+                with gr.Row():
+                    search_query = gr.Textbox(placeholder="E.g., a person typing on a laptop in a cafe", container=False, scale=4)
+                    search_btn = gr.Button("Search", variant="primary", elem_classes="primary-btn", scale=1)
+                
+                # Hidden settings accordion to keep UI clean
+                with gr.Accordion("Search Settings", open=False):
+                    clip_duration = gr.Slider(label="Clip Duration (seconds)", minimum=3.0, maximum=60.0, value=10.0, step=1.0)
+                    min_similarity = gr.Slider(label="Min Similarity Gate", minimum=0.0, maximum=1.0, value=0.0, step=0.05)
+                    use_dynamic_duration = gr.Checkbox(label="Auto-Detect Scene Duration", value=False)
+                    anchor_only = gr.Checkbox(label="Search Anchor Frames Only", value=False)
                     
-                # --- Local File Tab ---
-                with gr.TabItem("Local Video File"):
-                    local_file = gr.File(label="Upload MP4 / WebM File", file_types=["video"])
-                    with gr.Row():
-                        local_fps = gr.Slider(label="Sampling Rate (FPS)", minimum=0.1, maximum=10.0, value=5.0, step=0.1)
-                        local_adaptive = gr.Checkbox(label="Adaptive FPS (Motion-Based)", value=True)
-                    with gr.Row():
-                        local_index_audio = gr.Checkbox(label="Index Dialogue (Whisper Audio)", value=False, info="Required for dialogue RAG search. (Slow on CPUs)")
-                        local_index_ocr = gr.Checkbox(label="Index Screen Text (EasyOCR)", value=False, info="Required for on-screen text search. (Slow on CPUs)")
-                    local_index_btn = gr.Button("Index Uploaded Video", variant="primary", elem_classes="primary-btn")
-                    local_status = gr.Textbox(label="Status / Progress Summary", interactive=False, placeholder="Upload a file and click Index...")
+                search_metrics = gr.Markdown("No query submitted yet.")
 
-            gr.HTML("<div style='height: 1px; background: rgba(255,255,255,0.08); margin: 20px 0;'></div>")
-
-            gr.HTML("<h2 class='pane-title'>🔍 2. Semantic Scene Search</h2>")
-            search_query = gr.Textbox(label="Search Query", placeholder="e.g. 'pedestrians crossing road', 'concept of neural networks'")
-            with gr.Row():
-                clip_duration = gr.Slider(label="Clip Duration (seconds)", minimum=3.0, maximum=60.0, value=10.0, step=1.0)
-                min_similarity = gr.Slider(label="Min Similarity Gate", minimum=0.0, maximum=1.0, value=0.0, step=0.05)
-            with gr.Row():
-                use_dynamic_duration = gr.Checkbox(label="Auto-Detect Scene Duration", value=False)
-                anchor_only = gr.Checkbox(label="Search Anchor Frames Only", value=False)
-            search_btn = gr.Button("Search Video", variant="primary", elem_classes="primary-btn")
-            search_metrics = gr.Markdown("No query submitted yet.")
-
-            gr.HTML("<div style='height: 1px; background: rgba(255,255,255,0.08); margin: 20px 0;'></div>")
-
-            gr.HTML("<h2 class='pane-title'>🤖 3. Conversational Video Chatbot</h2>")
-            chatbot = gr.Chatbot(label="ADVE Video Chatbot", height=320)
-            chat_input = gr.Textbox(label="Ask a question about the video...", placeholder="e.g. 'What is the presenter writing at 2:30?'")
-            with gr.Row():
-                chat_submit = gr.Button("Send Question", variant="primary", elem_classes="primary-btn")
-                chat_clear_btn = gr.Button("Clear Chat", elem_classes="secondary-btn")
-
-        # --- RIGHT PANE: Consolidated Synced Outputs & Playback ---
-        with gr.Column(scale=5, elem_classes="glass-panel"):
-            gr.HTML("<h2 class='pane-title'>🎞️ Synced Media Console</h2>")
-            
-            # Matched Frame Anchors Gallery
-            gr.HTML("<h3 style='font-size: 14px; font-weight: 600; color: #cbd5e1; margin-bottom: 8px;'>Matching Keyframe Anchors</h3>")
-            gallery_previews = gr.Gallery(label="Matching Frame Anchors", columns=3, rows=2, object_fit="contain", height=240)
-            
-            gr.HTML("<div style='height: 1px; background: rgba(255,255,255,0.08); margin: 20px 0;'></div>")
-            
-            # Video Playback Clip Players
-            gr.HTML("<h3 style='font-size: 14px; font-weight: 600; color: #cbd5e1; margin-bottom: 8px;'>Extracted Match Playback Clips</h3>")
-            with gr.Tabs(elem_classes="tabs"):
-                with gr.TabItem("Match 1"):
+        # ── COLUMN 2: Results & Chatbot ──
+        with gr.Column(scale=4):
+            # Match Results Card
+            with gr.Column(elem_classes="panel-card"):
+                gr.HTML("<h2 class='pane-title'>2. Search & Match Results</h2>")
+                gr.HTML("<p style='font-size: 13px; color: #64748b; margin-top: -8px; margin-bottom: 16px;'>Top matching keyframes from your indexed videos.</p>")
+                
+                with gr.Row():
+                    with gr.Column(elem_classes="match-card", scale=1):
+                        m1_img = gr.Image(show_label=False, interactive=False, height=180)
+                        m1_meta = gr.HTML(empty_meta)
+                    with gr.Column(elem_classes="match-card", scale=1):
+                        m2_img = gr.Image(show_label=False, interactive=False, height=180)
+                        m2_meta = gr.HTML(empty_meta)
+                    with gr.Column(elem_classes="match-card", scale=1):
+                        m3_img = gr.Image(show_label=False, interactive=False, height=180)
+                        m3_meta = gr.HTML(empty_meta)
+                        
+                # Video playback players (shown dynamically underneath when match is selected/clicked)
+                with gr.Accordion("Clips Playback", open=False):
                     clip_player_1 = gr.Video(label="Match 1 Clip", visible=False)
-                with gr.TabItem("Match 2"):
                     clip_player_2 = gr.Video(label="Match 2 Clip", visible=False)
-                with gr.TabItem("Match 3"):
                     clip_player_3 = gr.Video(label="Match 3 Clip", visible=False)
-                    
-            gr.HTML("<div style='height: 1px; background: rgba(255,255,255,0.08); margin: 20px 0;'></div>")
-            
-            # Performance Metric / Quick Guide Card
-            with gr.Column(elem_classes="stats-card"):
-                gr.HTML("<h4 style='font-weight: 600; color: #cbd5e1; margin-top: 0;'>💡 System Instructions & Guidance</h4>")
-                gr.Markdown(
-                    "1. **Super-fast Ingestion:** Default options bypass slow OCR and Whisper layers. Visual-only indexing runs in seconds (up to **8x faster**).\n"
-                    "2. **Search / Chat Integration:** Submitting a search or chatting with the bot automatically updates the right-hand column's keyframe gallery and playbacks simultaneously.\n"
-                    "3. **Audio Indexing Option:** If you need dialog search, check 'Index Dialogue (Whisper Audio)' during ingestion."
-                )
+
+            # Chatbot Card
+            with gr.Column(elem_classes="panel-card"):
+                gr.HTML("<h2 class='pane-title'>4. Conversational Video Chatbot</h2>")
+                chatbot = gr.Chatbot(show_label=False, height=220)
+                with gr.Row():
+                    chat_input = gr.Textbox(placeholder="Ask a question about the video...", container=False, scale=4)
+                    chat_submit = gr.Button("Send", variant="primary", elem_classes="primary-btn", scale=1)
+                with gr.Row():
+                    gr.HTML("<span style='font-size: 12px; color: #94a3b8; padding-top: 6px;'>⚡ Powered by vision-language models</span>", scale=4)
+                    chat_clear_btn = gr.Button("Clear Chat", elem_classes="secondary-btn", size="sm", scale=1)
+
+        # ── COLUMN 3: Deployed Index Statistics ──
+        with gr.Column(scale=3):
+            # Stats Card
+            with gr.Column(elem_classes="panel-card"):
+                gr.HTML("<h2 class='pane-title'>5. Deployed Index Statistics</h2>")
+                stats_html = gr.HTML(get_dynamic_stats())
+                
+                gr.HTML("<h3 style='font-size: 0.95rem; font-weight: 700; color: #0f172a; margin-top: 24px; margin-bottom: 8px;'>Validation Reference</h3>")
+                gr.HTML("""
+                <div class="stats-list">
+                    <div class="stats-item"><span>Synthetic</span><strong>96.7% savings · 0.948 cos</strong></div>
+                    <div class="stats-item"><span>MOT17</span><strong>60.3% savings · 0.992 cos</strong></div>
+                    <div class="stats-item"><span>GPU VRAM</span><strong>330 MB (vs 950 MB baseline)</strong></div>
+                </div>
+                """)
+                
+                gr.HTML("<h3 style='font-size: 0.95rem; font-weight: 700; color: #0f172a; margin-top: 24px; margin-bottom: 8px;'>Quick Guide</h3>")
+                gr.HTML("""
+                <div style="font-size: 0.82rem; color: #475569; line-height: 1.5;">
+                    <div style="margin-bottom: 8px;"><strong>1</strong> Upload or paste a YouTube URL and index the video.</div>
+                    <div><strong>2</strong> Search by text or ask a question in the chatbot.</div>
+                </div>
+                """)
+
+    # ── Footer ──
+    gr.HTML("""
+    <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 24px; font-size: 13px; color: #64748b;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span>Built with ❤️ by <strong>Asmitha</strong></span>
+            <span>|</span>
+            <a href="https://github.com/asmitha2025/ADVE" target="_blank" style="color: #64748b; display: flex; align-items: center; gap: 4px;">
+                GitHub <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+            </a>
+        </div>
+        <div style="display: flex; gap: 16px; align-items: center;">
+            <span style="display: flex; align-items: center; gap: 4px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg> Use via API
+            </span>
+            <span>|</span>
+            <span style="display: flex; align-items: center; gap: 4px;">
+                Built with Gradio 🧡
+            </span>
+            <span>|</span>
+            <span style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings
+            </span>
+        </div>
+    </div>
+    """)
+
+    # ── Load Stats Dynamically on Page Initialization ──
+    demo.load(fn=get_dynamic_stats, outputs=[stats_html])
 
     # ── Button Bindings ──────────────────────────────────────────────────────────
     yt_index_btn.click(
         fn=handle_youtube_index,
         inputs=[yt_url, yt_fps, yt_adaptive, yt_index_audio, yt_index_ocr],
         outputs=[yt_status]
+    ).then(
+        fn=get_dynamic_stats,
+        outputs=[stats_html]
     )
     
     local_index_btn.click(
         fn=handle_local_index,
         inputs=[local_file, local_fps, local_adaptive, local_index_audio, local_index_ocr],
         outputs=[local_status]
+    ).then(
+        fn=get_dynamic_stats,
+        outputs=[stats_html]
     )
     
     search_btn.click(
         fn=search_and_retrieve,
         inputs=[search_query, clip_duration, use_dynamic_duration, anchor_only, min_similarity],
-        outputs=[search_metrics, gallery_previews, clip_player_1, clip_player_2, clip_player_3]
+        outputs=[search_metrics, m1_img, m1_meta, m2_img, m2_meta, m3_img, m3_meta, clip_player_1, clip_player_2, clip_player_3]
+    )
+    search_query.submit(
+        fn=search_and_retrieve,
+        inputs=[search_query, clip_duration, use_dynamic_duration, anchor_only, min_similarity],
+        outputs=[search_metrics, m1_img, m1_meta, m2_img, m2_meta, m3_img, m3_meta, clip_player_1, clip_player_2, clip_player_3]
     )
     
     # Chatbot submit bindings (Submit on Send or enter key)
     chat_submit.click(
         fn=chatbot_chat_flow,
         inputs=[chat_input, chatbot, clip_duration, use_dynamic_duration, min_similarity],
-        outputs=[chat_input, chatbot, gallery_previews, clip_player_1, clip_player_2, clip_player_3]
+        outputs=[chat_input, chatbot, m1_img, m1_meta, m2_img, m2_meta, m3_img, m3_meta, clip_player_1, clip_player_2, clip_player_3]
     )
     chat_input.submit(
         fn=chatbot_chat_flow,
         inputs=[chat_input, chatbot, clip_duration, use_dynamic_duration, min_similarity],
-        outputs=[chat_input, chatbot, gallery_previews, clip_player_1, clip_player_2, clip_player_3]
+        outputs=[chat_input, chatbot, m1_img, m1_meta, m2_img, m2_meta, m3_img, m3_meta, clip_player_1, clip_player_2, clip_player_3]
     )
     chat_clear_btn.click(
         fn=clear_chat,
         inputs=[],
-        outputs=[chatbot, chat_input, gallery_previews]
+        outputs=[chatbot, chat_input, m1_img, m1_meta, m2_img, m2_meta, m3_img, m3_meta]
     )
 
 if __name__ == "__main__":
