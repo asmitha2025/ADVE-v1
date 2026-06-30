@@ -1214,62 +1214,89 @@ def clear_chat():
 custom_css = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-/* Apply premium font globally */
+/* Custom premium variable system */
+:root {
+  --bg: #090a0f;
+  --surface: rgba(19, 21, 32, 0.6);
+  --surface-hover: rgba(25, 28, 43, 0.85);
+  --border: rgba(255, 255, 255, 0.08);
+  --glow-cyan: rgba(0, 242, 254, 0.2);
+  --glow-violet: rgba(139, 92, 246, 0.15);
+  --cyan: #00f2fe;
+  --violet: #8b5cf6;
+}
+
 * {
+    box-sizing: border-box;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 
 body, .gradio-container {
-    background-color: #0d0f12 !important;
+    background: radial-gradient(circle at top right, #1a162b, #090a0f 60%) !important;
     color: #ffffff !important;
 }
 
 .dashboard-container {
-    background-color: #0b0c10 !important;
-    border: 1.5px solid #00f2fe !important;
-    box-shadow: 0 0 25px rgba(0, 242, 254, 0.25) !important;
-    border-radius: 16px !important;
-    padding: 24px !important;
-    margin: 10px auto !important;
-    max-width: 1400px !important;
+    background: rgba(10, 11, 16, 0.85) !important;
+    backdrop-filter: blur(25px) !important;
+    border: 1px solid rgba(0, 242, 254, 0.3) !important;
+    box-shadow: 0 0 35px rgba(0, 242, 254, 0.15), inset 0 0 15px rgba(255, 255, 255, 0.02) !important;
+    border-radius: 20px !important;
+    padding: 30px !important;
+    margin: 15px auto !important;
+    max-width: 1440px !important;
 }
 
-/* Panel cards styling */
+/* Panel cards styling with glassmorphism and subtle neon backlights */
 .panel-card {
-    background: #13151c !important;
-    border: 1px solid #202430 !important;
-    border-radius: 12px !important;
-    padding: 20px !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
-    margin-bottom: 20px !important;
+    background: rgba(20, 22, 33, 0.5) !important;
+    backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 16px !important;
+    padding: 24px !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4) !important;
+    margin-bottom: 24px !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.panel-card:hover {
+    border-color: rgba(0, 242, 254, 0.25) !important;
+    box-shadow: 0 15px 35px rgba(0, 242, 254, 0.08) !important;
+    transform: translateY(-2px);
 }
 
 /* Headings */
 .pane-title {
-    font-size: 1.1rem !important;
-    font-weight: 700 !important;
+    font-size: 1.15rem !important;
+    font-weight: 800 !important;
     color: #ffffff !important;
-    margin-bottom: 16px !important;
+    margin-bottom: 20px !important;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #1f242e;
-    padding-bottom: 8px;
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 10px;
+    letter-spacing: -0.01em;
 }
 
 .pane-title::after {
     content: '•••';
-    color: #4a5568;
+    color: rgba(255, 255, 255, 0.25);
     font-size: 14px;
     letter-spacing: 2px;
     cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.pane-title:hover::after {
+    color: #00f2fe;
 }
 
 /* Tabs style */
 .tabs {
-    background: #171a25 !important;
-    border: 1px solid #202430 !important;
-    border-radius: 8px !important;
+    background: rgba(10, 11, 16, 0.5) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 10px !important;
     padding: 4px !important;
 }
 
@@ -1280,98 +1307,114 @@ body, .gradio-container {
 }
 
 .tabs button.selected {
-    background: #232631 !important;
+    background: rgba(255, 255, 255, 0.05) !important;
     color: #00f2fe !important;
-    font-weight: 600 !important;
-    border-radius: 6px !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
 }
 
-/* Buttons styling */
+/* Buttons styling with neon gradients */
 button.primary-btn {
-    background: #2563eb !important;
+    background: linear-gradient(135deg, #00f2fe, #8b5cf6) !important;
     border: none !important;
     color: white !important;
-    font-weight: 600 !important;
-    border-radius: 6px !important;
-    padding: 10px 20px !important;
-    transition: background-color 0.2s ease !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.02em !important;
+    border-radius: 10px !important;
+    padding: 12px 24px !important;
+    box-shadow: 0 4px 15px rgba(0, 242, 254, 0.25) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    cursor: pointer !important;
 }
 
 button.primary-btn:hover {
-    background: #1d4ed8 !important;
+    background: linear-gradient(135deg, #00d6e2, #7c3aed) !important;
+    box-shadow: 0 6px 20px rgba(0, 242, 254, 0.4), 0 0 10px rgba(139, 92, 246, 0.3) !important;
+    transform: scale(1.02);
 }
 
 button.secondary-btn {
-    background: #171a25 !important;
-    border: 1px solid #202430 !important;
-    color: #cbd5e1 !important;
-    border-radius: 6px !important;
-    font-weight: 500 !important;
-    transition: all 0.2s ease !important;
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #e2e8f0 !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
 }
 
 button.secondary-btn:hover {
-    background: #232631 !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
     color: #ffffff !important;
 }
 
-/* Input Elements */
+/* Input Elements styling */
 input, textarea, select {
-    background: #171a25 !important;
-    border: 1px solid #202430 !important;
-    border-radius: 6px !important;
+    background: rgba(10, 11, 16, 0.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 10px !important;
     color: #ffffff !important;
+    padding: 12px !important;
+    transition: all 0.3s ease !important;
 }
 
 input:focus, textarea:focus {
     border-color: #00f2fe !important;
-    box-shadow: 0 0 0 2px rgba(0, 242, 254, 0.1) !important;
+    box-shadow: 0 0 12px rgba(0, 242, 254, 0.25) !important;
+    background: rgba(10, 11, 16, 0.8) !important;
 }
 
 /* Badges */
 .score-badge {
-    background: rgba(16, 185, 129, 0.1) !important;
-    color: #10b981 !important;
-    border: 1px solid rgba(16, 185, 129, 0.2) !important;
-    padding: 4px 10px !important;
+    background: rgba(16, 185, 129, 0.12) !important;
+    color: #34d399 !important;
+    border: 1px solid rgba(16, 185, 129, 0.25) !important;
+    padding: 5px 12px !important;
     border-radius: 9999px !important;
-    font-size: 0.75rem !important;
-    font-weight: 600 !important;
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
 }
 
 .frame-badge {
-    background: rgba(142, 154, 168, 0.1) !important;
-    color: #8e9aa8 !important;
-    border: 1px solid rgba(142, 154, 168, 0.2) !important;
-    padding: 4px 10px !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: #cbd5e1 !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    padding: 5px 12px !important;
     border-radius: 9999px !important;
-    font-size: 0.75rem !important;
-    font-weight: 600 !important;
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
 }
 
 .meta-row {
     display: flex;
     justify-content: center;
-    gap: 8px;
-    margin-top: 8px;
+    gap: 10px;
+    margin-top: 10px;
 }
 
-/* Statistics metric boxes */
+/* Metric box with glassmorphism and subtle glowing border */
 .metric-box {
-    background: #171a25 !important;
-    border: 1px solid #202430 !important;
-    border-radius: 8px !important;
-    padding: 16px !important;
-    margin-bottom: 12px !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border-radius: 12px !important;
+    padding: 20px !important;
+    margin-bottom: 16px !important;
+    transition: all 0.3s ease !important;
+}
+
+.metric-box:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(0, 242, 254, 0.15) !important;
+    box-shadow: 0 8px 24px rgba(0, 242, 254, 0.05) !important;
 }
 
 .metric-header {
-    font-size: 0.72rem !important;
-    font-weight: 700 !important;
-    color: #8e9aa8 !important;
-    letter-spacing: 0.05em !important;
+    font-size: 0.75rem !important;
+    font-weight: 800 !important;
+    color: #94a3b8 !important;
+    letter-spacing: 0.08em !important;
     text-transform: uppercase;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }
 
 .metric-value-row {
@@ -1381,10 +1424,13 @@ input:focus, textarea:focus {
 }
 
 .metric-val {
-    font-size: 2.2rem !important;
-    font-weight: 800 !important;
+    font-size: 2.4rem !important;
+    font-weight: 900 !important;
     color: #ffffff !important;
     line-height: 1 !important;
+    background: linear-gradient(135deg, #ffffff, #94a3b8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 .mini-chart {
@@ -1392,21 +1438,26 @@ input:focus, textarea:focus {
 }
 
 .chatbot {
-    background: #13151c !important;
-    border: 1px solid #202430 !important;
+    background: rgba(10, 11, 16, 0.4) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 14px !important;
 }
 
+/* Chat bubble styling */
 .chatbot .message.user {
-    background-color: #232631 !important;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(139, 92, 246, 0.1)) !important;
+    border: 1px solid rgba(139, 92, 246, 0.25) !important;
     color: #ffffff !important;
-    border-radius: 8px !important;
+    border-radius: 14px 14px 2px 14px !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
 }
 
 .chatbot .message.bot {
-    background-color: #171a25 !important;
+    background: linear-gradient(135deg, rgba(0, 242, 254, 0.15), rgba(0, 242, 254, 0.05)) !important;
+    border: 1px solid rgba(0, 242, 254, 0.2) !important;
     color: #e2e8f0 !important;
-    border-radius: 8px !important;
-    border-left: 2px solid #00f2fe !important;
+    border-radius: 14px 14px 14px 2px !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
 }
 """
 
