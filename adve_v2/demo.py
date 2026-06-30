@@ -1100,114 +1100,116 @@ custom_css = """
 }
 
 body, .gradio-container {
-    background-color: #f8fafc !important;
-    color: #0f172a !important;
+    background-color: #fafafa !important;
+    color: #171717 !important;
 }
 
-/* Panel cards styling */
+/* Panel cards styling - clean white with thin gray border */
 .panel-card {
     background: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 12px !important;
+    border: 1px solid #f0f0f0 !important;
+    border-radius: 8px !important;
     padding: 24px !important;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03) !important;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02) !important;
     margin-bottom: 20px !important;
 }
 
-/* Headings */
+/* Headings - clean dark slate */
 .pane-title {
-    font-size: 1.15rem !important;
+    font-size: 1.1rem !important;
     font-weight: 700 !important;
-    color: #0f172a !important;
+    color: #171717 !important;
     margin-bottom: 16px !important;
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-/* Tabs style */
+/* Tabs style - flat & clean */
 .tabs {
-    background: #f1f5f9 !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 8px !important;
-    padding: 4px !important;
+    background: #f5f5f5 !important;
+    border: 1px solid #e5e5e5 !important;
+    border-radius: 6px !important;
+    padding: 3px !important;
 }
 
 .tabitem {
     background: transparent !important;
     border: none !important;
-    padding: 12px 6px !important;
+    padding: 10px 4px !important;
 }
 
 .tabs button.selected {
     background: #ffffff !important;
-    color: #2563eb !important;
+    color: #171717 !important;
     font-weight: 600 !important;
-    border-radius: 6px !important;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08) !important;
-    border: 1px solid #e2e8f0 !important;
+    border-radius: 4px !important;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+    border: 1px solid #e5e5e5 !important;
 }
 
-/* Buttons styling */
+/* Buttons styling - solid black and white borders */
 button.primary-btn {
-    background: #2563eb !important;
-    border: none !important;
-    color: white !important;
+    background: #171717 !important;
+    border: 1px solid #171717 !important;
+    color: #ffffff !important;
     font-weight: 600 !important;
     border-radius: 6px !important;
     padding: 10px 20px !important;
-    transition: background-color 0.2s ease !important;
+    transition: all 0.15s ease !important;
 }
 
 button.primary-btn:hover {
-    background: #1d4ed8 !important;
+    background: #404040 !important;
+    border-color: #404040 !important;
 }
 
 button.secondary-btn {
     background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
-    color: #475569 !important;
+    border: 1px solid #e5e5e5 !important;
+    color: #404040 !important;
     border-radius: 6px !important;
     font-weight: 500 !important;
-    transition: all 0.2s ease !important;
+    transition: all 0.15s ease !important;
 }
 
 button.secondary-btn:hover {
-    background: #f8fafc !important;
-    color: #0f172a !important;
+    background: #f5f5f5 !important;
+    color: #171717 !important;
+    border-color: #d4d4d4 !important;
 }
 
-/* Input Elements */
+/* Input Elements - flat white with thin borders */
 input, textarea, select {
     background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
+    border: 1px solid #e5e5e5 !important;
     border-radius: 6px !important;
-    color: #0f172a !important;
+    color: #171717 !important;
 }
 
 input:focus, textarea:focus {
-    border-color: #2563eb !important;
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1) !important;
+    border-color: #171717 !important;
+    box-shadow: 0 0 0 2px rgba(23, 23, 23, 0.05) !important;
 }
 
-/* Badges */
+/* Badges - clean pastel */
 .score-badge {
-    background: #ecfdf5 !important;
-    color: #059669 !important;
-    border: 1px solid #a7f3d0 !important;
-    padding: 4px 10px !important;
-    border-radius: 9999px !important;
-    font-size: 0.75rem !important;
+    background: #f0fdf4 !important;
+    color: #16a34a !important;
+    border: 1px solid #bbf7d0 !important;
+    padding: 3px 8px !important;
+    border-radius: 4px !important;
+    font-size: 0.72rem !important;
     font-weight: 600 !important;
 }
 
 .frame-badge {
-    background: #f8fafc !important;
-    color: #475569 !important;
-    border: 1px solid #cbd5e1 !important;
-    padding: 4px 10px !important;
-    border-radius: 9999px !important;
-    font-size: 0.75rem !important;
+    background: #f4f4f5 !important;
+    color: #71717a !important;
+    border: 1px solid #e4e4e7 !important;
+    padding: 3px 8px !important;
+    border-radius: 4px !important;
+    font-size: 0.72rem !important;
     font-weight: 600 !important;
 }
 
@@ -1221,70 +1223,40 @@ input:focus, textarea:focus {
 /* Match Card Container */
 .match-card {
     background: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 12px !important;
-    padding: 8px !important;
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+    border: 1px solid #f0f0f0 !important;
+    border-radius: 8px !important;
+    padding: 6px !important;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.01) !important;
 }
 
-/* Stats list */
-.stats-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.stats-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #f1f5f9;
-    font-size: 0.88rem;
-}
-
-.stats-item span {
-    color: #475569;
-}
-
-.stats-item strong {
-    color: #0f172a;
-    font-weight: 600;
-}
-
-.stats-item strong.highlight-val {
-    color: #2563eb;
-}
-
-/* Style checkboxes as beautiful option cards */
+/* Style checkboxes as minimal clean cards */
 .checkbox-card {
     background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
-    border-radius: 8px !important;
-    padding: 12px 16px !important;
+    border: 1px solid #e5e5e5 !important;
+    border-radius: 6px !important;
+    padding: 12px 14px !important;
     display: flex !important;
     align-items: center !important;
     gap: 8px !important;
     cursor: pointer !important;
-    transition: all 0.2s ease !important;
+    transition: all 0.15s ease !important;
 }
 
 .checkbox-card:hover {
-    border-color: #2563eb !important;
-    background: #f8fafc !important;
+    border-color: #a3a3a3 !important;
 }
 
 .checkbox-card input[type="checkbox"] {
-    width: 16px !important;
-    height: 16px !important;
-    accent-color: #2563eb !important;
+    width: 14px !important;
+    height: 14px !important;
+    accent-color: #171717 !important;
     cursor: pointer !important;
 }
 
 .checkbox-card span {
-    font-size: 0.88rem !important;
+    font-size: 0.85rem !important;
     font-weight: 600 !important;
-    color: #0f172a !important;
+    color: #171717 !important;
     line-height: 1.2 !important;
     display: block !important;
 }
@@ -1292,61 +1264,63 @@ input:focus, textarea:focus {
 .chk-adaptive span::after {
     content: "Motion-adaptive" !important;
     display: block !important;
-    font-size: 0.75rem !important;
+    font-size: 0.7rem !important;
     font-weight: 400 !important;
-    color: #64748b !important;
-    margin-top: 2px !important;
+    color: #888888 !important;
+    margin-top: 1px !important;
 }
 
 .chk-whisper span::after {
     content: "Transcripts" !important;
     display: block !important;
-    font-size: 0.75rem !important;
+    font-size: 0.7rem !important;
     font-weight: 400 !important;
-    color: #64748b !important;
-    margin-top: 2px !important;
+    color: #888888 !important;
+    margin-top: 1px !important;
 }
 
 .chk-easyocr span::after {
     content: "OCR Text" !important;
     display: block !important;
-    font-size: 0.75rem !important;
+    font-size: 0.7rem !important;
     font-weight: 400 !important;
-    color: #64748b !important;
-    margin-top: 2px !important;
+    color: #888888 !important;
+    margin-top: 1px !important;
 }
 
 /* Custom styling for options row */
 .option-card-row {
-    gap: 12px !important;
-    margin-bottom: 16px !important;
+    gap: 10px !important;
+    margin-bottom: 14px !important;
 }
 
 /* Status textbox styling */
 .status-box textarea {
-    background: #f0f7ff !important;
-    border: 1px solid #bfdbfe !important;
-    color: #2563eb !important;
-    font-weight: 500 !important;
+    background: #fcfcfc !important;
+    border: 1px solid #e5e5e5 !important;
+    color: #171717 !important;
+    font-weight: 400 !important;
+    font-size: 0.82rem !important;
 }
 
-/* Chat bubble overrides */
+/* Chat bubble overrides - Clean Apple-like style */
 .gradio-container .chatbot-wrap .message.user, 
 .gradio-container .message.user,
 .chatbot .message.user {
-    background-color: #2563eb !important;
-    color: #ffffff !important;
+    background-color: #f4f4f5 !important;
+    color: #171717 !important;
     border-radius: 12px 12px 0 12px !important;
+    border: 1px solid #e5e5e5 !important;
 }
 
 .gradio-container .chatbot-wrap .message.bot, 
 .gradio-container .message.bot,
 .chatbot .message.bot,
 .chatbot .message.assistant {
-    background-color: #f1f5f9 !important;
-    color: #0f172a !important;
+    background-color: #ffffff !important;
+    color: #171717 !important;
     border-radius: 12px 12px 12px 0 !important;
-    border: 1px solid #e2e8f0 !important;
+    border: 1px solid #e5e5e5 !important;
 }
 """
 
@@ -1363,48 +1337,30 @@ def get_dynamic_stats():
         total, anchors, trans, ocr_count, videos_count = 0, 0, 0, 0, 0
         
     return f"""
-    <div class="stats-list">
-        <div class="stats-item">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg>
-                <span>Total Embeddings</span>
-            </div>
-            <strong class="highlight-val">{total:,}</strong>
+    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 8px;">
+        <div style="background: #ffffff; border: 1px solid #f1f5f9; padding: 12px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 2px;">{total:,}</div>
+            <div style="font-size: 0.65rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Embeddings</div>
         </div>
-        <div class="stats-item">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M17.5 19A3.5 3.5 0 0 0 21 15.5c0-2.79-2.54-4.5-5-4.5-.47 0-.89.09-1.3.27A7 7 0 1 0 2 12.5C2 16 5 19 8.5 19h9z"/></svg>
-                <span>Anchor (CLIP)</span>
-            </div>
-            <strong>{anchors:,}</strong>
+        <div style="background: #ffffff; border: 1px solid #f1f5f9; padding: 12px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 2px;">{anchors:,}</div>
+            <div style="font-size: 0.65rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Anchor (CLIP)</div>
         </div>
-        <div class="stats-item">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M12 2L2 22h20L12 2z"/></svg>
-                <span>Delta (approx.)</span>
-            </div>
-            <strong>{(total - anchors):,}</strong>
+        <div style="background: #ffffff; border: 1px solid #f1f5f9; padding: 12px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 2px;">{(total - anchors):,}</div>
+            <div style="font-size: 0.65rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Delta (approx)</div>
         </div>
-        <div class="stats-item">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                <span>Transcripts (Segments)</span>
-            </div>
-            <strong>{trans:,}</strong>
+        <div style="background: #ffffff; border: 1px solid #f1f5f9; padding: 12px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 2px;">{trans:,}</div>
+            <div style="font-size: 0.65rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Transcripts</div>
         </div>
-        <div class="stats-item">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M4 7V4h3M20 7V4h-3M4 17v3h3M20 17v3h-3M9 12h6M12 9v6"/></svg>
-                <span>OCR Text Chunks</span>
-            </div>
-            <strong>{ocr_count:,}</strong>
+        <div style="background: #ffffff; border: 1px solid #f1f5f9; padding: 12px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 2px;">{ocr_count:,}</div>
+            <div style="font-size: 0.65rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">OCR Chunks</div>
         </div>
-        <div class="stats-item">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><polygon points="9,11 15,14 9,17" fill="currentColor"/></svg>
-                <span>Videos Indexed</span>
-            </div>
-            <strong>{videos_count:,}</strong>
+        <div style="background: #ffffff; border: 1px solid #f1f5f9; padding: 12px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 2px;">{videos_count:,}</div>
+            <div style="font-size: 0.65rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Videos</div>
         </div>
     </div>
     """
@@ -1412,27 +1368,27 @@ def get_dynamic_stats():
 with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
     # ── Navbar ──
     gr.HTML("""
-    <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; border-bottom: 1px solid #e2e8f0; padding: 12px 24px; margin: -16px -16px 24px -16px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; border-bottom: 1px solid #f0f0f0; padding: 12px 24px; margin: -16px -16px 24px -16px;">
         <div style="display: flex; align-items: center; gap: 8px;">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2L2 22H22L12 2Z" fill="#2563eb"/>
+                <path d="M12 2L2 22H22L12 2Z" fill="#171717"/>
             </svg>
-            <span style="font-size: 20px; font-weight: 800; color: #2563eb; letter-spacing: -0.02em;">ADVE</span>
+            <span style="font-size: 20px; font-weight: 800; color: #171717; letter-spacing: -0.02em;">ADVE</span>
         </div>
         <div style="display: flex; gap: 24px; font-weight: 500;">
-            <a href="#" style="color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 4px;">Overview</a>
-            <a href="#" style="color: #475569;">Search</a>
-            <a href="#" style="color: #475569;">Chat</a>
-            <a href="#" style="color: #475569;">Docs</a>
-            <a href="https://github.com/asmitha2025/ADVE" target="_blank" style="color: #475569; display: flex; align-items: center; gap: 4px;">
+            <a href="#" style="color: #171717; border-bottom: 2px solid #171717; padding-bottom: 4px;">Overview</a>
+            <a href="#" style="color: #737373;">Search</a>
+            <a href="#" style="color: #737373;">Chat</a>
+            <a href="#" style="color: #737373;">Docs</a>
+            <a href="https://github.com/asmitha2025/ADVE" target="_blank" style="color: #737373; display: flex; align-items: center; gap: 4px;">
                 GitHub <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
             </a>
         </div>
         <div style="display: flex; align-items: center; gap: 16px;">
-            <button style="background: none; border: none; cursor: pointer; color: #475569;">
+            <button style="background: none; border: none; cursor: pointer; color: #737373;">
                 <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m11.314 11.314l.707.707M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/></svg>
             </button>
-            <button style="background: #2563eb; color: #ffffff; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <button style="background: #171717; color: #ffffff; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer;">
                 <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
                 Start Indexing
             </button>
@@ -1444,8 +1400,8 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
     with gr.Row():
         with gr.Column(scale=7):
             gr.HTML("""
-            <h1 style="font-size: 32px; font-weight: 800; color: #0f172a; margin-bottom: 8px; letter-spacing: -0.03em;">ADVE — Semantic Video Search & Chatbot</h1>
-            <p style="font-size: 15px; color: #475569; max-width: 850px; line-height: 1.6; margin: 0; margin-bottom: 24px;">
+            <h1 style="font-size: 32px; font-weight: 800; color: #171717; margin-bottom: 8px; letter-spacing: -0.03em;">ADVE — Semantic Video Search & Chatbot</h1>
+            <p style="font-size: 15px; color: #737373; max-width: 850px; line-height: 1.6; margin: 0; margin-bottom: 24px;">
                 Anchor-Delta Video Embedding (ADVE) reduces neural vision network calls by up to 90% via motion-adaptive keyframe processing for semantic scene search and video Q&A.
             </p>
             """)
@@ -1453,29 +1409,33 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
             gr.HTML("""
             <div style="display: flex; justify-content: center; align-items: center; height: 100%;">
                 <svg width="280" height="150" viewBox="0 0 280 150" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M10 80 C 60 50, 110 110, 160 75 C 210 40, 240 90, 270 65" stroke="#dbeafe" stroke-width="3" stroke-linecap="round"/>
-                    <path d="M20 100 C 70 70, 120 130, 170 95 C 220 60, 250 110, 280 85" stroke="#eff6ff" stroke-width="3" stroke-linecap="round"/>
+                    <line x1="10" y1="10" x2="270" y2="10" stroke="#f0f0f0" stroke-width="1"/>
+                    <line x1="10" y1="40" x2="270" y2="40" stroke="#f0f0f0" stroke-width="1"/>
+                    <line x1="10" y1="70" x2="270" y2="70" stroke="#f0f0f0" stroke-width="1"/>
+                    <line x1="10" y1="100" x2="270" y2="100" stroke="#f0f0f0" stroke-width="1"/>
+                    <line x1="10" y1="130" x2="270" y2="130" stroke="#f0f0f0" stroke-width="1"/>
                     
-                    <g transform="translate(35, 15) rotate(-8)">
-                        <rect width="60" height="60" rx="16" fill="#ffffff" filter="drop-shadow(0px 8px 16px rgba(37, 99, 235, 0.08))"/>
-                        <rect width="60" height="60" rx="16" stroke="#2563eb" stroke-opacity="0.1" stroke-width="1"/>
-                        <circle cx="30" cy="30" r="9" stroke="#2563eb" stroke-width="2.5"/>
-                        <line x1="36.5" y1="36.5" x2="47" y2="47" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
+                    <line x1="40" y1="10" x2="40" y2="140" stroke="#f0f0f0" stroke-width="1"/>
+                    <line x1="110" y1="10" x2="110" y2="140" stroke="#f0f0f0" stroke-width="1"/>
+                    <line x1="180" y1="10" x2="180" y2="140" stroke="#f0f0f0" stroke-width="1"/>
+                    <line x1="250" y1="10" x2="250" y2="140" stroke="#f0f0f0" stroke-width="1"/>
+                    
+                    <g transform="translate(30, 20)">
+                        <rect width="70" height="70" rx="4" fill="#ffffff" stroke="#171717" stroke-width="1.5" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.02))"/>
+                        <circle cx="35" cy="30" r="10" stroke="#737373" stroke-width="1.5"/>
+                        <line x1="42" y1="37" x2="52" y2="47" stroke="#737373" stroke-width="1.5" stroke-linecap="round"/>
+                        <line x1="15" y1="58" x2="55" y2="58" stroke="#e5e5e5" stroke-width="1.5"/>
                     </g>
                     
-                    <g transform="translate(165, 12) rotate(6)">
-                        <rect width="70" height="55" rx="16" fill="#ffffff" filter="drop-shadow(0px 8px 16px rgba(37, 99, 235, 0.08))"/>
-                        <rect width="70" height="55" rx="16" stroke="#2563eb" stroke-opacity="0.1" stroke-width="1"/>
-                        <circle cx="27" cy="27" r="3" fill="#2563eb"/>
-                        <circle cx="37" cy="27" r="3" fill="#2563eb"/>
-                        <circle cx="47" cy="27" r="3" fill="#2563eb"/>
+                    <g transform="translate(150, 45)">
+                        <rect width="90" height="60" rx="4" fill="#ffffff" stroke="#171717" stroke-width="1.5" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.02))"/>
+                        <polygon points="40,22 55,30 40,38" stroke="#171717" stroke-width="1.5" fill="none"/>
+                        <line x1="15" y1="12" x2="75" y2="12" stroke="#e5e5e5" stroke-width="1.5"/>
                     </g>
                     
-                    <g transform="translate(105, 80) rotate(10)">
-                        <rect width="50" height="50" rx="14" fill="#ffffff" filter="drop-shadow(0px 8px 16px rgba(37, 99, 235, 0.08))"/>
-                        <rect width="50" height="50" rx="14" stroke="#2563eb" stroke-opacity="0.1" stroke-width="1"/>
-                        <path d="M21 16 L34 25 L21 34 Z" fill="#2563eb"/>
-                    </g>
+                    <circle cx="120" cy="55" r="4" fill="#171717"/>
+                    <line x1="100" y1="55" x2="120" y2="55" stroke="#171717" stroke-width="1" stroke-dasharray="2 2"/>
+                    <line x1="120" y1="55" x2="150" y2="75" stroke="#171717" stroke-width="1" stroke-dasharray="2 2"/>
                 </svg>
             </div>
             """)
@@ -1485,7 +1445,7 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
         with gr.Column(scale=3):
             # Ingestion Card
             with gr.Column(elem_classes="panel-card"):
-                gr.HTML("<h2 class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#2563eb' stroke-width='2' style='display:inline;margin-right:6px;'><path d='M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>1. Video Ingestion & Indexing</h2>")
+                gr.HTML("""<h2 class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#171717' stroke-width='2' style='display:inline;margin-right:6px;'><path d='M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>1. Video Ingestion & Indexing</h2>""")
                 with gr.Tabs(elem_classes="tabs"):
                     with gr.TabItem("YouTube URL"):
                         yt_url = gr.Textbox(show_label=False, placeholder="https://www.youtube.com/watch?v=...", container=False)
@@ -1511,8 +1471,8 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
 
             # Search Card
             with gr.Column(elem_classes="panel-card"):
-                gr.HTML("<h2 class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#2563eb' stroke-width='2' style='display:inline;margin-right:6px;'><circle cx='11' cy='11' r='8'/><path d='M21 21l-4.35-4.35'/></svg>3. Semantic Scene Search</h2>")
-                gr.HTML("<p style='font-size: 13px; color: #475569; margin-top: -8px; margin-bottom: 12px;'>Describe the scene you're looking for</p>")
+                gr.HTML("""<h2 class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#171717' stroke-width='2' style='display:inline;margin-right:6px;'><circle cx='11' cy='11' r='8'/><path d='M21 21l-4.35-4.35'/></svg>3. Semantic Scene Search</h2>""")
+                gr.HTML("<p style='font-size: 13px; color: #737373; margin-top: -8px; margin-bottom: 12px;'>Describe the scene you're looking for</p>")
                 with gr.Row():
                     search_query = gr.Textbox(placeholder="E.g., a person typing on a laptop in a cafe", container=False, scale=4)
                     search_btn = gr.Button("🔍 Search", variant="primary", elem_classes="primary-btn", scale=1)
@@ -1530,8 +1490,8 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
         with gr.Column(scale=4):
             # Match Results Card
             with gr.Column(elem_classes="panel-card"):
-                gr.HTML("<h2 class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#2563eb' stroke-width='2' style='display:inline;margin-right:6px;'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg>2. Search & Match Results</h2>")
-                gr.HTML("<p style='font-size: 13px; color: #64748b; margin-top: -8px; margin-bottom: 16px;'>Top matching keyframes from your indexed videos.</p>")
+                gr.HTML("""<h2 class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#171717' stroke-width='2' style='display:inline;margin-right:6px;'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg>2. Search & Match Results</h2>""")
+                gr.HTML("<p style='font-size: 13px; color: #737373; margin-top: -8px; margin-bottom: 16px;'>Top matching keyframes from your indexed videos.</p>")
                 
                 with gr.Row():
                     with gr.Column(elem_classes="match-card", scale=1):
@@ -1552,25 +1512,25 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
 
             # Chatbot Card
             with gr.Column(elem_classes="panel-card"):
-                gr.HTML("<h2 class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#2563eb' stroke-width='2' style='display:inline;margin-right:6px;'><path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/></svg>4. Conversational Video Chatbot</h2>")
+                gr.HTML("""<h2 class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#171717' stroke-width='2' style='display:inline;margin-right:6px;'><path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/></svg>4. Conversational Video Chatbot</h2>""")
                 chatbot = gr.Chatbot(show_label=False, height=220)
                 with gr.Row():
                     chat_input = gr.Textbox(placeholder="Ask a question about the video...", container=False, scale=4)
                     chat_submit = gr.Button("✈️ Send", variant="primary", elem_classes="primary-btn", scale=1)
                 with gr.Row():
-                    gr.HTML("<span style='font-size: 12px; color: #94a3b8; padding-top: 6px;'>⚡ Powered by vision-language models</span>", scale=4)
+                    gr.HTML("<span style='font-size: 12px; color: #a3a3a3; padding-top: 6px;'>⚡ Powered by vision-language models</span>")
                     chat_clear_btn = gr.Button("🗑️ Clear Chat", elem_classes="secondary-btn", size="sm", scale=1)
 
         # ── COLUMN 3: Deployed Index Statistics ──
         with gr.Column(scale=3):
             # Stats Card
             with gr.Column(elem_classes="panel-card"):
-                gr.HTML("<h2 class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#2563eb' stroke-width='2' style='display:inline;margin-right:6px;'><path d='M12 20h9M3 20h4M3 12h18M3 4h18'/></svg>5. Deployed Index Statistics</h2>")
+                gr.HTML("""<h2 class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#171717' stroke-width='2' style='display:inline;margin-right:6px;'><path d='M12 20h9M3 20h4M3 12h18M3 4h18'/></svg>5. Deployed Index Statistics</h2>""")
                 stats_html = gr.HTML(get_dynamic_stats())
                 
-                gr.HTML("<h3 style='font-size: 0.95rem; font-weight: 700; color: #0f172a; margin-top: 24px; margin-bottom: 8px;'>Validation Reference</h3>")
+                gr.HTML("<h3 style='font-size: 0.95rem; font-weight: 700; color: #171717; margin-top: 24px; margin-bottom: 8px;'>Validation Reference</h3>")
                 gr.HTML("""
-                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+                <div style="background: #ffffff; border: 1px solid #f0f0f0; border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
                     <div class="stats-item" style="border: none; padding: 0;"><span>Synthetic</span><strong>96.7% savings · 0.948 cosine sim</strong></div>
                     <div class="stats-item" style="border: none; padding: 0;"><span>MOT17</span><strong>60.3% savings · 0.992 cosine sim</strong></div>
                     <div class="stats-item" style="border: none; padding: 0;"><span>GPU VRAM</span><strong>330 MB (vs 950 MB baseline)</strong></div>
@@ -1579,17 +1539,17 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
                 
                 gr.HTML("""
                 <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
-                    <div style="display: flex; align-items: center; gap: 8px; font-size: 0.95rem; font-weight: 700; color: #0f172a;">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A5 5 0 0 0 8 8c0 1 .3 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/></svg>
+                    <div style="display: flex; align-items: center; gap: 8px; font-size: 0.95rem; font-weight: 700; color: #171717;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#171717" stroke-width="2"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A5 5 0 0 0 8 8c0 1 .3 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/></svg>
                         <span>Quick Guide</span>
                     </div>
-                    <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.82rem; color: #475569;">
+                    <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.82rem; color: #737373;">
                         <div style="display: flex; align-items: flex-start; gap: 8px;">
-                            <span style="background: #e2e8f0; color: #475569; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-weight: bold; flex-shrink: 0; font-size: 0.75rem;">1</span>
+                            <span style="background: #f4f4f5; color: #171717; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-weight: bold; flex-shrink: 0; font-size: 0.75rem;">1</span>
                             <span>Upload or paste a YouTube URL and index the video.</span>
                         </div>
                         <div style="display: flex; align-items: flex-start; gap: 8px;">
-                            <span style="background: #e2e8f0; color: #475569; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-weight: bold; flex-shrink: 0; font-size: 0.75rem;">2</span>
+                            <span style="background: #f4f4f5; color: #171717; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-weight: bold; flex-shrink: 0; font-size: 0.75rem;">2</span>
                             <span>Search by text or ask a question in the chatbot.</span>
                         </div>
                     </div>
@@ -1598,11 +1558,11 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
 
     # ── Footer ──
     gr.HTML("""
-    <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 24px; font-size: 13px; color: #64748b;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #f0f0f0; padding-top: 16px; margin-top: 24px; font-size: 13px; color: #737373;">
         <div style="display: flex; align-items: center; gap: 8px;">
             <span>Built by <strong>Asmitha</strong></span>
             <span>|</span>
-            <a href="https://github.com/asmitha2025/ADVE" target="_blank" style="color: #64748b; display: flex; align-items: center; gap: 4px;">
+            <a href="https://github.com/asmitha2025/ADVE" target="_blank" style="color: #737373; display: flex; align-items: center; gap: 4px;">
                 GitHub <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
             </a>
         </div>
