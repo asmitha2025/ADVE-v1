@@ -176,6 +176,15 @@ class RegisterRequest(BaseModel):
 class YouTubeIndexRequest(BaseModel):
     url: str
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    question: str
+    video_id: Optional[str] = None
+    history: Optional[List[ChatMessage]] = []
+
 
 # ── Background indexing ───────────────────────────────────────────────────────
 
@@ -699,11 +708,169 @@ async def search_image(
 
 @app.get("/v1/stats")
 async def get_stats():
+    ocr_count = 0
+    try:
+        row = search_index.db.execute("SELECT COUNT(*) FROM ocr_data").fetchone()
+        if row:
+            ocr_count = row[0]
+    except Exception:
+        pass
+
+    transcript_count = 0
+    try:
+        row = search_index.db.execute("SELECT COUNT(*) FROM transcripts").fetchone()
+        if row:
+            transcript_count = row[0]
+    except Exception:
+        pass
+
     return {
         "index":   search_index.stats(),
         "cameras": camera_mgr.status(),
-        "active_tasks": active_tasks
+        "active_tasks": active_tasks,
+        "ocr_count": ocr_count,
+        "transcript_count": transcript_count
     }
+
+
+@app.post("/v1/chat/rag")
+async def chat_rag(request: ChatRequest):
+    """Conversational Video RAG: Queries CLIP/Whisper index, fetches context frames, and prompts Groq LLM."""
+    # 1. Determine active video path
+    video_path = request.video_id
+    if not video_path:
+        stats = search_index.stats()
+        indexed = stats.get("indexed_videos", [])
+        if indexed:
+            video_path = indexed[-1]["video_path"]
+        else:
+            return {"answer": "No videos have been indexed yet. Please index a video first."}
+
+    # 2. Get Groq API key
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return {
+            "answer": "⚠️ GROQ_API_KEY environment variable is missing on the server. Please set it to enable Video Chat RAG."
+        }
+
+    # 3. Query text database for matching frames
+    print(f"[API Chat RAG] Querying for: '{request.question}' on '{video_path}'")
+    raw_results = search_index.search_by_text(request.question, k=15)
+    
+    # Filter results to the active video
+    from adve.search.index import normalize_video_path
+    norm_active = normalize_video_path(video_path)
+    video_results = [r for r in raw_results if normalize_video_path(r.video_path) == norm_active]
+    
+    # Deduplicate temporally (at least 8.0 seconds apart)
+    deduped = []
+    for r in video_results:
+        if not any(abs(r.timestamp - accepted.timestamp) < 8.0 for accepted in deduped):
+            deduped.append(r)
+            
+    # Slice to top 3 for Groq context
+    rag_context = deduped[:3]
+    if not rag_context:
+        return {"answer": "No relevant moments or transcripts found in the video to answer this question."}
+
+    try:
+        from groq import Groq
+        import base64
+        import cv2
+        client = Groq(api_key=api_key)
+        
+        # Build prior history text
+        history_context = ""
+        if request.history:
+            history_context = "Here is the conversation history so far for context:\n"
+            for item in request.history:
+                history_context += f"{item.role.capitalize()}: {item.content}\n"
+            history_context += "\n"
+
+        prompt_text = (
+            f"You are an AI Video RAG Chatbot. Answer the user's current question based on the retrieved video context "
+            f"and the conversation history.\n\n"
+            f"{history_context}"
+            f"Current User Question: '{request.question}'\n\n"
+            f"Use the following retrieved frame images and spoken transcripts to formulate your answer. "
+            f"Provide timestamps (e.g. [12.5s]) in your response when referencing specific moments."
+        )
+
+        prompt_content = [{"type": "text", "text": prompt_text}]
+        
+        # Resolve path to actual file on server
+        actual_path = video_path
+        if not os.path.exists(actual_path):
+            basename = os.path.basename(video_path)
+            for folder in ["demo_videos", UPLOADS_DIR, "demo_data/videos"]:
+                candidate = os.path.join(folder, basename)
+                if os.path.exists(candidate):
+                    actual_path = candidate
+                    break
+
+        for i, r in enumerate(rag_context):
+            # Fetch transcripts
+            w_start = max(0.0, r.timestamp - 5.0)
+            w_end = r.timestamp + 10.0
+            
+            transcript_text = ""
+            try:
+                cursor = search_index.db.execute(
+                    "SELECT timestamp, text FROM transcripts WHERE video_path = ? AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp ASC",
+                    (video_path, w_start, w_end)
+                )
+                rows = cursor.fetchall()
+                if rows:
+                    transcript_text = " ".join([f"[{ts:.1f}s] {text}" for ts, text in rows])
+                else:
+                    transcript_text = "(No spoken audio detected in this window)"
+            except Exception as e:
+                print(f"[API Chat RAG] Transcript error: {e}")
+                transcript_text = "(Error retrieving transcripts)"
+
+            cap = cv2.VideoCapture(actual_path)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, r.frame_idx)
+            ret, frame = cap.read()
+            cap.release()
+            
+            if ret:
+                # Resize frame to max width of 600px to optimize payload
+                h, w = frame.shape[:2]
+                if w > 600:
+                    scale = 600 / w
+                    frame = cv2.resize(frame, (600, int(h * scale)))
+                    
+                _, buf = cv2.imencode(".jpg", frame)
+                b64 = base64.b64encode(buf).decode()
+                
+                prompt_content.append({
+                    "type": "text",
+                    "text": (
+                        f"--- Scene Chunk {i+1} at timestamp {r.timestamp:.1f}s (match score: {r.similarity * 100:.1f}%) ---\n"
+                        f"Spoken Dialogue Transcript: \"{transcript_text}\""
+                    )
+                })
+                prompt_content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{b64}"
+                    }
+                })
+                
+        prompt_content.append({
+            "type": "text",
+            "text": "Analyze both the visual details in the frames and the spoken dialogue transcripts to answer the user's question accurately."
+        })
+        
+        response = client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[{"role": "user", "content": prompt_content}],
+            max_tokens=400,
+            temperature=0.2
+        )
+        return {"answer": response.choices[0].message.content}
+    except Exception as e:
+        return {"answer": f"Error querying Groq LLM: {str(e)}"}
 
 
 @app.get("/", response_class=HTMLResponse)
