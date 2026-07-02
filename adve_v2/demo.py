@@ -1115,31 +1115,31 @@ custom_css = """
     --radius-lg: 16px;
     --radius-md: 11px;
     --radius-sm: 9px;
-    --shadow: 0 1px 2px rgba(16,19,34,0.05), 0 8px 24px rgba(16,19,34,0.05);
-    --shadow-lift: 0 6px 14px rgba(16,19,34,0.06), 0 16px 40px rgba(16,19,34,0.08);
-    --ring: 0 0 0 3px rgba(52,102,255,0.18);
+    --shadow: 0 4px 12px rgba(16,19,34,0.03), 0 12px 32px rgba(16,19,34,0.04);
+    --shadow-lift: 0 12px 30px rgba(16,19,34,0.08), 0 24px 60px rgba(16,19,34,0.1);
+    --ring: 0 0 0 4px rgba(52,102,255,0.22);
 }
 
 .dark {
-    --bg: #0a0d16;
-    --bg-soft: #0e1220;
-    --card: #111528;
-    --border: #232a42;
-    --border-soft: #1b2136;
-    --text: #eef0f8;
-    --muted: #9aa3bd;
-    --muted-soft: #6b7593;
-    --blue: #5b8dff;
-    --blue-dark: #4472ec;
-    --blue-light: #182140;
+    --bg: #070913;
+    --bg-soft: #0c0f1d;
+    --card: rgba(18, 22, 41, 0.7);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-soft: rgba(255, 255, 255, 0.04);
+    --text: #f1f3f9;
+    --muted: #9fa7c1;
+    --muted-soft: #636b85;
+    --blue: #4f80ff;
+    --blue-dark: #3765e2;
+    --blue-light: rgba(52, 102, 255, 0.15);
     --violet: #9b86ff;
-    --grad-a: #5b8dff;
+    --grad-a: #4f80ff;
     --grad-b: #9b86ff;
-    --green-bg: #0f2a20;
+    --green-bg: rgba(63, 214, 148, 0.15);
     --green-text: #3fd694;
-    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
-    --shadow-lift: 0 10px 24px rgba(0,0,0,0.35), 0 20px 48px rgba(0,0,0,0.4);
-    --ring: 0 0 0 3px rgba(91,141,255,0.28);
+    --shadow: 0 4px 12px rgba(0,0,0,0.25), 0 12px 32px rgba(0,0,0,0.3);
+    --shadow-lift: 0 16px 36px rgba(0,0,0,0.35), 0 32px 72px rgba(0,0,0,0.45);
+    --ring: 0 0 0 4px rgba(79,128,255,0.3);
 }
 
 /* ── Animations ── */
@@ -1163,10 +1163,10 @@ h1, h3, .logo span { font-family: 'Space Grotesk', Inter, sans-serif !important;
 body, .gradio-container {
     background-color: var(--bg) !important;
     color: var(--text) !important;
-    transition: background 0.35s ease, color 0.35s ease;
+    transition: background 0.35s cubic-bezier(0.4, 0, 0.2, 1), color 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ── Panel cards styling (maps to HTML .card) ── */
+/* ── Panel cards styling (maps to HTML .card with glassmorphism) ── */
 .panel-card {
     background: var(--card) !important;
     border: 1px solid var(--border) !important;
@@ -1174,13 +1174,16 @@ body, .gradio-container {
     padding: 22px !important;
     box-shadow: var(--shadow) !important;
     margin-bottom: 20px !important;
-    transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.25s ease, transform 0.25s ease;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
     opacity: 0;
     transform: translateY(10px);
-    animation: rise 0.6s ease forwards;
+    animation: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 .panel-card:hover {
     box-shadow: var(--shadow-lift) !important;
+    transform: translateY(-2px) !important;
 }
 
 /* ── Card Headings (maps to HTML .card-head) ── */
@@ -1237,10 +1240,11 @@ body, .gradio-container {
     align-items: center !important;
     gap: 6px !important;
     cursor: pointer !important;
-    transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease !important;
+    transition: border-color 0.25s ease, background 0.25s ease, transform 0.2s ease !important;
 }
 .checkbox-card:hover {
-    transform: translateY(-1px) !important;
+    transform: translateY(-2px) !important;
+    border-color: var(--blue) !important;
 }
 .checkbox-card input[type="checkbox"]:checked ~ span,
 .checkbox-card:has(input:checked) {
@@ -1281,12 +1285,16 @@ button.primary-btn {
     color: #fff !important; border: none !important;
     padding: 12px !important; border-radius: var(--radius-sm) !important;
     font-weight: 700 !important; font-size: 14px !important;
-    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
-    box-shadow: 0 6px 16px rgba(52,102,255,0.32) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease !important;
+    box-shadow: 0 4px 14px rgba(52,102,255,0.3) !important;
 }
 button.primary-btn:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 10px 22px rgba(52,102,255,0.4) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 22px rgba(52,102,255,0.45) !important;
+    filter: brightness(1.1) !important;
+}
+button.primary-btn:active {
+    transform: translateY(1px) !important;
 }
 
 /* ── Secondary / Ghost Button (maps to HTML .btn-ghost) ── */
@@ -1309,11 +1317,12 @@ input, textarea, select {
     border: 1px solid var(--border) !important;
     border-radius: var(--radius-sm) !important;
     color: var(--text) !important;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease !important;
 }
-input:focus, textarea:focus {
+input:focus, textarea:focus, select:focus {
     border-color: var(--blue) !important;
     box-shadow: var(--ring) !important;
+    background: var(--card) !important;
 }
 input::placeholder, textarea::placeholder {
     color: var(--muted-soft) !important;
@@ -1330,20 +1339,23 @@ input::placeholder, textarea::placeholder {
     padding: 14px !important;
 }
 
-/* ── Match Card Container (maps to HTML .match) ── */
+/* ── Match Card Container (maps to HTML .match with scaling) ── */
 .match-card {
     border: 1px solid var(--border) !important;
     border-radius: var(--radius-md) !important;
     overflow: hidden !important;
     padding: 6px !important;
     background: var(--card) !important;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease !important;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s ease !important;
     cursor: pointer;
 }
 .match-card:hover {
-    transform: translateY(-3px) !important;
-    box-shadow: var(--shadow-lift) !important;
+    transform: translateY(-6px) scale(1.02) !important;
+    box-shadow: 0 16px 36px rgba(16,19,34,0.08), 0 4px 12px rgba(52,102,255,0.08) !important;
     border-color: var(--blue) !important;
+}
+.dark .match-card:hover {
+    box-shadow: 0 16px 36px rgba(0,0,0,0.45), 0 4px 12px rgba(79,128,255,0.18) !important;
 }
 
 /* ── Badges (maps to HTML .badge) ── */
@@ -1376,6 +1388,7 @@ input::placeholder, textarea::placeholder {
     color: #fff !important;
     border-radius: 12px 12px 2px 12px !important;
     border: none !important;
+    box-shadow: 0 4px 12px rgba(52,102,255,0.2) !important;
 }
 .gradio-container .chatbot-wrap .message.bot,
 .gradio-container .message.bot,
@@ -1385,6 +1398,7 @@ input::placeholder, textarea::placeholder {
     color: var(--text) !important;
     border-radius: 12px 12px 12px 2px !important;
     border: 1px solid var(--border) !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.02) !important;
 }
 
 /* ── Stat rows (maps to HTML .stat-row) ── */
@@ -1539,6 +1553,12 @@ label, .gr-label, .label-wrap {
 }
 .btn-header-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(52,102,255,0.4); }
 .btn-header-primary svg { width: 15px; height: 15px; }
+
+/* ── Hide/show theme Toggle Icons ── */
+#themeToggle svg.sun { display: block; }
+#themeToggle svg.moon { display: none; }
+html.dark #themeToggle svg.sun { display: none; }
+html.dark #themeToggle svg.moon { display: block; }
 
 /* ── Footer ── */
 .adve-footer {
