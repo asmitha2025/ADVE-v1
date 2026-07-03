@@ -1,3 +1,12 @@
+---
+title: Adve Video Search
+emoji: 📚
+colorFrom: blue
+colorTo: yellow
+sdk: docker
+pinned: false
+---
+
 # ADVE — Anchor-Delta Video Embedding
 
 > **96.67% fewer CLIP encoder calls. 0.9484 cosine similarity. Real-time video understanding without re-encoding every frame.**
