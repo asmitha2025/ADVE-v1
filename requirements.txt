@@ -10,3 +10,11 @@ Pillow>=10.0.0
 ftfy
 regex
 tqdm
+gradio>=6.0.0
+yt-dlp
+faiss-cpu
+easyocr
+openai-whisper
+fastapi
+uvicorn
+python-multipart
