@@ -18,3 +18,5 @@ openai-whisper
 fastapi
 uvicorn
 python-multipart
+groq>=1.0.0
+static-ffmpeg
