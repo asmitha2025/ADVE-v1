@@ -1678,8 +1678,8 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
     """)
 
     with gr.Row():
-        # ── COLUMN 1: Ingestion & Search ──
-        with gr.Column(scale=3):
+        # ── COLUMN 1: Ingestion & Stats (scale=4) ──
+        with gr.Column(scale=4):
             # Ingestion Card
             with gr.Column(elem_classes="panel-card"):
                 gr.HTML("""<div class='pane-title'><span class='step-num'>1</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><path d='M20 17.58A5 5 0 0018 8h-1.26A8 8 0 104 16.25'/><path d='M12 12v9'/><path d='M9 18l3 3 3-3'/></svg>Video Ingestion & Indexing</div>""")
@@ -1691,7 +1691,7 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
                             yt_index_audio = gr.Checkbox(label="Whisper", value=False, elem_classes=["checkbox-card", "chk-whisper"], container=False)
                             yt_index_ocr = gr.Checkbox(label="EasyOCR", value=False, elem_classes=["checkbox-card", "chk-easyocr"], container=False)
                         with gr.Accordion("Advanced Ingestion Settings", open=False):
-                            yt_fps = gr.Slider(label="Sampling Rate (FPS)", minimum=0.1, maximum=10.0, value=5.0, step=0.1)
+                            yt_fps = gr.Slider(label="Sampling Rate (FPS)", minimum=0.1, maximum=10.0, value=2.0, step=0.1)
                         yt_index_btn = gr.Button("🚀 Index Video", variant="primary", elem_classes="primary-btn")
                         yt_status = gr.Textbox(label="Indexing Output Status", interactive=False, placeholder="Waiting to index...", elem_classes="status-box")
                         
@@ -1702,13 +1702,40 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
                             local_index_audio = gr.Checkbox(label="Whisper", value=False, elem_classes=["checkbox-card", "chk-whisper"], container=False)
                             local_index_ocr = gr.Checkbox(label="EasyOCR", value=False, elem_classes=["checkbox-card", "chk-easyocr"], container=False)
                         with gr.Accordion("Advanced Ingestion Settings", open=False):
-                            local_fps = gr.Slider(label="Sampling Rate (FPS)", minimum=0.1, maximum=10.0, value=5.0, step=0.1)
+                            local_fps = gr.Slider(label="Sampling Rate (FPS)", minimum=0.1, maximum=10.0, value=2.0, step=0.1)
                         local_index_btn = gr.Button("🚀 Index Video", variant="primary", elem_classes="primary-btn")
                         local_status = gr.Textbox(label="Indexing Output Status", interactive=False, placeholder="Waiting to index...", elem_classes="status-box")
 
+            # Stats Card
+            with gr.Column(elem_classes="panel-card"):
+                gr.HTML("""<div class='pane-title'><span class='step-num'>5</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><path d='M12 20h9M3 20h4M3 12h18M3 4h18'/></svg>Deployed Index Statistics</div>""")
+                stats_html = gr.HTML(get_dynamic_stats())
+                
+                gr.HTML("""
+                <div class="validation-box">
+                    <p class="title">Validation Reference</p>
+                    <div class="validation-row"><span>Synthetic:</span><b>96.7% savings · 0.948 cosine sim</b></div>
+                    <div class="validation-row"><span>MOT17:</span><b>60.3% savings · 0.992 cosine sim</b></div>
+                    <div class="validation-row"><span>GPU VRAM:</span><b>330 MB (vs 950 MB baseline)</b></div>
+                </div>
+                """)
+                
+                gr.HTML("""
+                <div class="quick-guide">
+                    <div class="title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#f5a623;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 00-4 12.7c.6.5 1 1.2 1 2.3h6c0-1.1.4-1.8 1-2.3A7 7 0 0012 2z"/></svg>
+                        Quick Guide
+                    </div>
+                    <div class="qg-item"><span class="qg-num">1</span>Upload or paste a YouTube URL and index the video.</div>
+                    <div class="qg-item"><span class="qg-num">2</span>Search by text or ask a question in the chatbot.</div>
+                </div>
+                """)
+
+        # ── COLUMN 2: Search, Results & Chatbot (scale=6) ──
+        with gr.Column(scale=6):
             # Search Card
             with gr.Column(elem_classes="panel-card"):
-                gr.HTML("""<div class='pane-title'><span class='step-num'>3</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>Semantic Scene Search</div>""")
+                gr.HTML("""<div class='pane-title'><span class='step-num'>2</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>Semantic Scene Search</div>""")
                 gr.HTML("<p style='font-size: 13px; color: #71717a; margin-top: -8px; margin-bottom: 12px;'>Describe the scene you're looking for</p>")
                 with gr.Row():
                     search_query = gr.Textbox(placeholder="E.g., a person typing on a laptop in a cafe", container=False, scale=4)
@@ -1723,11 +1750,9 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
                     
                 search_metrics = gr.Markdown("No query submitted yet.")
 
-        # ── COLUMN 2: Results & Chatbot ──
-        with gr.Column(scale=4):
             # Match Results Card
             with gr.Column(elem_classes="panel-card"):
-                gr.HTML("""<div class='pane-title'><span class='step-num'>2</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>Search & Match Results</div>""")
+                gr.HTML("""<div class='pane-title'><span class='step-num'>3</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>Search & Match Results</div>""")
                 gr.HTML("<p style='font-size: 13px; color: #71717a; margin-top: -8px; margin-bottom: 16px;'>Top matching keyframes from your indexed videos.</p>")
                 
                 with gr.Row():
@@ -1757,33 +1782,6 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
                 with gr.Row():
                     gr.HTML("<span style='font-size: 12px; color: #52525b; padding-top: 6px;'>⚡ Powered by vision-language models</span>")
                     chat_clear_btn = gr.Button("🗑️ Clear Chat", elem_classes="secondary-btn", size="sm", scale=1)
-
-        # ── COLUMN 3: Deployed Index Statistics ──
-        with gr.Column(scale=3):
-            # Stats Card
-            with gr.Column(elem_classes="panel-card"):
-                gr.HTML("""<div class='pane-title'><span class='step-num'>5</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><path d='M12 20h9M3 20h4M3 12h18M3 4h18'/></svg>Deployed Index Statistics</div>""")
-                stats_html = gr.HTML(get_dynamic_stats())
-                
-                gr.HTML("""
-                <div class="validation-box">
-                    <p class="title">Validation Reference</p>
-                    <div class="validation-row"><span>Synthetic:</span><b>96.7% savings · 0.948 cosine sim</b></div>
-                    <div class="validation-row"><span>MOT17:</span><b>60.3% savings · 0.992 cosine sim</b></div>
-                    <div class="validation-row"><span>GPU VRAM:</span><b>330 MB (vs 950 MB baseline)</b></div>
-                </div>
-                """)
-                
-                gr.HTML("""
-                <div class="quick-guide">
-                    <div class="title">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#f5a623;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 00-4 12.7c.6.5 1 1.2 1 2.3h6c0-1.1.4-1.8 1-2.3A7 7 0 0012 2z"/></svg>
-                        Quick Guide
-                    </div>
-                    <div class="qg-item"><span class="qg-num">1</span>Upload or paste a YouTube URL and index the video.</div>
-                    <div class="qg-item"><span class="qg-num">2</span>Search by text or ask a question in the chatbot.</div>
-                </div>
-                """)
 
     # ── Footer ──
     gr.HTML("""
