@@ -1,15 +1,3 @@
----
-title: Adve Video Search
-emoji: 📚
-colorFrom: blue
-colorTo: yellow
-sdk: gradio
-sdk_version: 6.19.0
-python_version: 3.13
-app_file: app.py
-pinned: false
----
-
 # ADVE — Anchor-Delta Video Embedding
 
 > **96.67% fewer CLIP encoder calls. 0.9484 cosine similarity. Real-time video understanding without re-encoding every frame.**
