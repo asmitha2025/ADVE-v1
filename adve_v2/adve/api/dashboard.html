@@ -474,6 +474,36 @@
     font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
 
+  /* ── Progress and Chart Bars ── */
+  .bar-wrap {
+    margin-bottom: 16px;
+  }
+  .bar-wrap:last-child {
+    margin-bottom: 0;
+  }
+  .bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .bar-track {
+    height: 8px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--blue), var(--blue-dark));
+    box-shadow: 0 0 6px var(--blue-glow);
+    transition: width 0.8s ease-out;
+  }
+
   /* ── Background indexing tasks ── */
   .tasks-card { margin-top: 24px; }
   .tasks-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
