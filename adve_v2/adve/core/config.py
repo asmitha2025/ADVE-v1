@@ -23,11 +23,11 @@ class Config:
     YOLO_IMGSZ: int = 320  # Optimized input resolution
     
     # --- Performance Tuning ---
-    PROCESS_FPS: int = 5          # Target FPS for indexing (downsampling from native FPS)
-    MIN_PROCESS_FPS: float = 0.5   # Downsample to 0.5 FPS (1 frame every 2 seconds) in static scenes
-    MAX_PROCESS_FPS: float = 15.0  # Up to 15 FPS for high-motion action scenes
+    PROCESS_FPS: float = 2.0       # Target FPS for indexing (downsampling from native FPS)
+    MIN_PROCESS_FPS: float = 0.2   # Downsample to 0.2 FPS (1 frame every 5 seconds) in static scenes
+    MAX_PROCESS_FPS: float = 4.0   # Up to 4.0 FPS for high-motion action scenes
     MOTION_THRESHOLD: float = 0.003   # Skip YOLO if motion score is below this threshold
-    YOLO_HALF: bool = False        # FP16 YOLO (30% faster on GPU)
+    YOLO_HALF: bool = True         # FP16 YOLO (30% faster on GPU)
 
     # --- I/O ---
     OUTPUT_DIR: str = "outputs"

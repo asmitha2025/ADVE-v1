@@ -175,6 +175,10 @@ class RegisterRequest(BaseModel):
 
 class YouTubeIndexRequest(BaseModel):
     url: str
+    tiled_encoding: Optional[bool] = False
+    ocr: Optional[bool] = True
+    whisper: Optional[bool] = True
+    adaptive_fps: Optional[bool] = True
 
 class ChatRequest(BaseModel):
     question:       str
@@ -216,7 +220,15 @@ def transcribe_video_async(video_path: str, video_id: str):
         except Exception as e:
             print(f"[API Background] AudioIndexer failed: {e}")
 
-def index_video_task(video_path: str, video_id: str, task_id: Optional[str] = None):
+def index_video_task(
+    video_path: str,
+    video_id: str,
+    task_id: Optional[str] = None,
+    tiled_encoding: bool = False,
+    ocr: bool = True,
+    whisper: bool = True,
+    adaptive_fps: bool = True
+):
     """Runs in background after upload. Decodes frames, runs ADVE, and schedules OCR/Audio indexing."""
     import cv2
     import numpy as np
@@ -246,7 +258,7 @@ def index_video_task(video_path: str, video_id: str, task_id: Optional[str] = No
     idx      = 0
     anchor_timestamps = [] # Track anchor timestamps (Tiled Encoding & OCR)
 
-    print(f"Indexing visual frames: {video_id} (Adaptive FPS)")
+    print(f"Indexing visual frames: {video_id} (Adaptive={adaptive_fps}, Tiled={tiled_encoding})")
     if task_id and task_id in active_tasks:
         active_tasks[task_id]["status"] = "Indexing visual frames..."
 
@@ -262,21 +274,29 @@ def index_video_task(video_path: str, video_id: str, task_id: Optional[str] = No
         else:
             has_motion, motion_score = motion_filter.has_motion(frame)
 
-        # Dynamic skip size mapping
-        if motion_score < 0.003:
-            current_skip = int(fps / config.MIN_PROCESS_FPS)
-        elif motion_score < 0.01:
-            current_skip = int(fps / 2.0)
-        elif motion_score < 0.03:
-            current_skip = int(fps / config.PROCESS_FPS)
+        # Skip size mapping
+        if not adaptive_fps:
+            current_skip = max(1, int(fps / config.PROCESS_FPS))
         else:
-            current_skip = max(1, int(fps / config.MAX_PROCESS_FPS))
+            if motion_score < 0.003:
+                current_skip = int(fps / config.MIN_PROCESS_FPS)
+            elif motion_score < 0.01:
+                current_skip = int(fps / 2.0)
+            elif motion_score < 0.03:
+                current_skip = int(fps / config.PROCESS_FPS)
+            else:
+                current_skip = max(1, int(fps / config.MAX_PROCESS_FPS))
 
         # Check if we should skip the current frame
-        if idx - last_processed_idx < current_skip and (idx - last_processed_idx) < int(fps / config.MIN_PROCESS_FPS):
-            if not has_motion or (idx - last_processed_idx) < current_skip:
+        if not adaptive_fps:
+            if idx - last_processed_idx < current_skip:
                 idx += 1
                 continue
+        else:
+            if idx - last_processed_idx < current_skip and (idx - last_processed_idx) < int(fps / config.MIN_PROCESS_FPS):
+                if not has_motion or (idx - last_processed_idx) < current_skip:
+                    idx += 1
+                    continue
 
         last_processed_idx = idx
 
@@ -303,7 +323,7 @@ def index_video_task(video_path: str, video_id: str, task_id: Optional[str] = No
             anchor_timestamps.append(timestamp)
 
             # Tiled CLIP Encoding on Anchor Frames (Tiled Encoding / Small Objects)
-            if global_tiled_encoder is not None:
+            if tiled_encoding and global_tiled_encoder is not None:
                 try:
                     tile_results = global_tiled_encoder.encode_frame(frame, grid="2x2")
                     for tile in tile_results[1:]: # skip global (already added)
@@ -356,21 +376,30 @@ def index_video_task(video_path: str, video_id: str, task_id: Optional[str] = No
         threading.Thread(target=cleanup, daemon=True).start()
 
     # Launch background task for EasyOCR
-    threading.Thread(
-        target=ocr_video_async,
-        args=(video_path, video_id, anchor_timestamps),
-        daemon=True
-    ).start()
+    if ocr:
+        threading.Thread(
+            target=ocr_video_async,
+            args=(video_path, video_id, anchor_timestamps),
+            daemon=True
+        ).start()
 
     # Launch background task for Whisper & AudioIndexer
-    threading.Thread(
-        target=transcribe_video_async,
-        args=(video_path, video_id),
-        daemon=True
-    ).start()
+    if whisper:
+        threading.Thread(
+            target=transcribe_video_async,
+            args=(video_path, video_id),
+            daemon=True
+        ).start()
 
 
-def index_youtube_task(url: str, task_id: str):
+def index_youtube_task(
+    url: str,
+    task_id: str,
+    tiled_encoding: bool = False,
+    ocr: bool = True,
+    whisper: bool = True,
+    adaptive_fps: bool = True
+):
     """Downloads a YouTube video and indexes it in the background."""
     import yt_dlp
     
@@ -390,7 +419,7 @@ def index_youtube_task(url: str, task_id: str):
                 active_tasks[task_id]["progress"] = 100.0
                 
     opts = {
-        "format": "mp4/best",
+        "format": "best[height<=360]/worst[ext=mp4]/best",
         "outtmpl": os.path.join(UPLOADS_DIR, "%(id)s.%(ext)s"),
         "quiet": True,
         "no_warnings": True,
@@ -424,7 +453,15 @@ def index_youtube_task(url: str, task_id: str):
                 if task_id in active_tasks:
                     active_tasks[task_id]["name"] = filename
                 print(f"[YouTube] Downloaded successfully to {filepath}. Starting indexing...")
-                index_video_task(filepath, filename, task_id=task_id)
+                index_video_task(
+                    filepath,
+                    filename,
+                    task_id=task_id,
+                    tiled_encoding=tiled_encoding,
+                    ocr=ocr,
+                    whisper=whisper,
+                    adaptive_fps=adaptive_fps
+                )
             else:
                 if task_id in active_tasks:
                     active_tasks[task_id]["status"] = "Failed: Downloaded file not found"
@@ -468,7 +505,11 @@ async def register_user(request: RegisterRequest):
 @app.post("/v1/index/video")
 async def index_video(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    tiled_encoding: bool = False,
+    ocr: bool = True,
+    whisper: bool = True,
+    adaptive_fps: bool = True
 ):
     """Upload and index a video file. Returns immediately, indexes in background."""
     os.makedirs(UPLOADS_DIR, exist_ok=True)
@@ -484,7 +525,16 @@ async def index_video(
         "progress": 0.0
     }
 
-    background_tasks.add_task(index_video_task, dest, file.filename, task_id)
+    background_tasks.add_task(
+        index_video_task,
+        dest,
+        file.filename,
+        task_id,
+        tiled_encoding,
+        ocr,
+        whisper,
+        adaptive_fps
+    )
 
     return {
         "status":   "indexing_started",
@@ -506,7 +556,15 @@ async def index_youtube(
         "status": "Queued for download...",
         "progress": 0.0
     }
-    background_tasks.add_task(index_youtube_task, request.url, task_id)
+    background_tasks.add_task(
+        index_youtube_task,
+        request.url,
+        task_id,
+        request.tiled_encoding,
+        request.ocr,
+        request.whisper,
+        request.adaptive_fps
+    )
     return {
         "status":   "indexing_started",
         "task_id":  task_id,

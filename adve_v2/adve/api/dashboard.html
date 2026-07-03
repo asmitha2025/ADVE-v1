@@ -1113,6 +1113,10 @@
       return;
     }
 
+    const adaptive = document.getElementById('chk-adaptive').classList.contains('checked');
+    const whisper = document.getElementById('chk-whisper').classList.contains('checked');
+    const ocr = document.getElementById('chk-ocr').classList.contains('checked');
+
     indexBtn.disabled = true;
     statusPill.classList.remove('done');
     document.getElementById('statusSpinner').style.display = 'inline-block';
@@ -1122,7 +1126,13 @@
       const res = await fetch(`${API_BASE}/v1/index/youtube`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url })
+        body: JSON.stringify({
+          url: url,
+          tiled_encoding: false,
+          ocr: ocr,
+          whisper: whisper,
+          adaptive_fps: adaptive
+        })
       });
 
       if (res.ok) {
@@ -1153,6 +1163,10 @@
       return;
     }
 
+    const adaptive = document.getElementById('chk-adaptive').classList.contains('checked');
+    const whisper = document.getElementById('chk-whisper').classList.contains('checked');
+    const ocr = document.getElementById('chk-ocr').classList.contains('checked');
+
     indexBtn.disabled = true;
     statusPill.classList.remove('done');
     document.getElementById('statusSpinner').style.display = 'inline-block';
@@ -1164,7 +1178,7 @@
     formData.append("file", file);
 
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${API_BASE}/v1/index/video`, true);
+    xhr.open("POST", `${API_BASE}/v1/index/video?tiled_encoding=false&ocr=${ocr}&whisper=${whisper}&adaptive_fps=${adaptive}`, true);
 
     xhr.upload.onprogress = function(e) {
       if (e.lengthComputable) {
