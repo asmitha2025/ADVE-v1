@@ -1,831 +1,1452 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ADVE — Semantic Video Search & Chatbot</title>
+<title>ADVE — Semantic Video Search & Chatbot Portal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Tabler Icons -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <style>
-  :root{
-    --bg:#f6f7fb;
-    --bg-soft:#eef1fa;
-    --card:#ffffff;
-    --border:#e6e9f2;
-    --border-soft:#eef0f6;
-    --text:#0e1220;
-    --muted:#6b7280;
-    --muted-soft:#9aa2b1;
-    --blue:#3466ff;
-    --blue-dark:#1d4fd6;
-    --blue-light:#eef2ff;
-    --violet:#7c5cff;
-    --grad-a:#3b82f6;
-    --grad-b:#7c5cff;
-    --green-bg:#e9f9f0;
-    --green-text:#149a63;
-    --radius-lg:16px;
-    --radius-md:11px;
-    --radius-sm:9px;
+  :root {
+    --bg: #f6f7fb;
+    --bg-soft: #eef1fa;
+    --card: #ffffff;
+    --border: #e6e9f2;
+    --border-soft: #eef0f6;
+    --text: #0e1220;
+    --muted: #6b7280;
+    --muted-soft: #9aa2b1;
+    --blue: #3466ff;
+    --blue-dark: #1d4fd6;
+    --blue-light: #eef2ff;
+    --violet: #7c5cff;
+    --grad-a: #3b82f6;
+    --grad-b: #7c5cff;
+    --green-bg: #e9f9f0;
+    --green-text: #149a63;
+    --radius-lg: 16px;
+    --radius-md: 11px;
+    --radius-sm: 9px;
     --shadow: 0 1px 2px rgba(16,19,34,0.05), 0 8px 24px rgba(16,19,34,0.05);
     --shadow-lift: 0 6px 14px rgba(16,19,34,0.06), 0 16px 40px rgba(16,19,34,0.08);
     --ring: 0 0 0 3px rgba(52,102,255,0.18);
     color-scheme: light;
   }
-  html[data-theme="dark"]{
-    --bg:#0a0d16;
-    --bg-soft:#0e1220;
-    --card:#111528;
-    --border:#232a42;
-    --border-soft:#1b2136;
-    --text:#eef0f8;
-    --muted:#9aa3bd;
-    --muted-soft:#6b7593;
-    --blue:#5b8dff;
-    --blue-dark:#4472ec;
-    --blue-light:#182140;
-    --violet:#9b86ff;
-    --grad-a:#5b8dff;
-    --grad-b:#9b86ff;
-    --green-bg:#0f2a20;
-    --green-text:#3fd694;
+  html[data-theme="dark"] {
+    --bg: #0a0d16;
+    --bg-soft: #0e1220;
+    --card: #111528;
+    --border: #232a42;
+    --border-soft: #1b2136;
+    --text: #eef0f8;
+    --muted: #9aa3bd;
+    --muted-soft: #6b7593;
+    --blue: #5b8dff;
+    --blue-dark: #4472ec;
+    --blue-light: #182140;
+    --violet: #9b86ff;
+    --grad-a: #5b8dff;
+    --grad-b: #9b86ff;
+    --green-bg: #0f2a20;
+    --green-text: #3fd694;
     --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
     --shadow-lift: 0 10px 24px rgba(0,0,0,0.35), 0 20px 48px rgba(0,0,0,0.4);
     --ring: 0 0 0 3px rgba(91,141,255,0.28);
     color-scheme: dark;
   }
-  *{box-sizing:border-box;}
-  html{-webkit-font-smoothing:antialiased;}
-  body{
-    margin:0;
-    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    background:var(--bg);
-    color:var(--text);
-    transition:background 0.35s ease, color 0.35s ease;
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    margin: 0;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    transition: background 0.35s ease, color 0.35s ease;
   }
-  a{text-decoration:none;color:inherit;}
-  button{font-family:inherit;cursor:pointer;}
-  input, select, textarea{font-family:inherit;}
-  h1,h3,.logo span{font-family:"Space Grotesk",Inter,sans-serif;}
-  ::selection{background:var(--blue);color:#fff;}
+  a { text-decoration: none; color: inherit; }
+  button { font-family: inherit; cursor: pointer; }
+  input, select, textarea { font-family: inherit; }
+  h1, h2, h3, .logo span { font-family: "Space Grotesk", Inter, sans-serif; }
+  ::selection { background: var(--blue); color: #fff; }
 
-  @media (prefers-reduced-motion: reduce){
-    *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important;}
-  }
-
-  /* ---------- header ---------- */
-  header.top{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:14px 32px;
-    background:var(--card);
-    border-bottom:1px solid var(--border);
-    position:sticky;top:0;z-index:20;
-    transition:background 0.35s ease, border-color 0.35s ease;
-  }
-  .logo{display:flex;align-items:center;gap:9px;font-weight:700;font-size:19px;letter-spacing:0.2px;}
-  .logo .tri{
-    width:27px;height:27px;border-radius:8px;
-    background:linear-gradient(135deg,var(--grad-a),var(--grad-b));
-    display:flex;align-items:center;justify-content:center;
-    box-shadow:0 4px 12px rgba(52,102,255,0.35);
-  }
-  .logo .tri svg{width:13px;height:13px;fill:#fff;}
-  .logo span{color:var(--blue-dark);}
-
-  nav.main-nav{display:flex;align-items:center;gap:30px;}
-  nav.main-nav a{
-    font-size:14.5px;font-weight:600;color:var(--muted);
-    padding:6px 2px;position:relative;
-    display:flex;align-items:center;gap:5px;
-    transition:color 0.2s ease;
-  }
-  nav.main-nav a:hover{color:var(--text);}
-  nav.main-nav a.active{color:var(--blue);}
-  nav.main-nav a.active::after{
-    content:"";position:absolute;left:0;right:0;bottom:-15px;height:2px;
-    background:linear-gradient(90deg,var(--grad-a),var(--grad-b));border-radius:2px;
-  }
-  nav.main-nav a svg{width:13px;height:13px;opacity:0.7;}
-
-  .top-right{display:flex;align-items:center;gap:12px;}
-  .icon-btn{
-    width:36px;height:36px;border-radius:9px;border:1px solid var(--border);
-    background:var(--card);display:flex;align-items:center;justify-content:center;
-    transition:transform 0.2s ease, background 0.2s ease, border-color 0.35s ease;
-  }
-  .icon-btn:hover{transform:translateY(-1px);background:var(--bg-soft);}
-  .icon-btn:active{transform:translateY(0);}
-  .icon-btn svg{width:16px;height:16px;color:var(--text);}
-  .icon-btn .moon{display:none;}
-  html[data-theme="dark"] .icon-btn .sun{display:none;}
-  html[data-theme="dark"] .icon-btn .moon{display:block;}
-
-  .btn-primary{
-    display:flex;align-items:center;gap:8px;
-    background:linear-gradient(135deg,var(--grad-a),var(--blue-dark));
-    color:#fff;border:none;padding:10px 18px;border-radius:999px;
-    font-weight:700;font-size:14px;box-shadow:0 6px 16px rgba(52,102,255,0.32);
-    transition:transform 0.2s ease, box-shadow 0.2s ease;
-  }
-  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(52,102,255,0.4);}
-  .btn-primary:active{transform:translateY(0);}
-  .btn-primary svg{width:15px;height:15px;}
-
-  /* ---------- hero ---------- */
-  .hero{
-    position:relative;overflow:hidden;
-    background:linear-gradient(180deg,var(--bg-soft) 0%, var(--bg) 100%);
-    padding:60px 32px 48px;
-    transition:background 0.35s ease;
-  }
-  .hero::before{
-    content:"";position:absolute;inset:0;
-    background:radial-gradient(600px 300px at 85% 0%, rgba(124,92,255,0.14), transparent 60%),
-               radial-gradient(500px 260px at 60% -10%, rgba(52,102,255,0.14), transparent 60%);
-    pointer-events:none;
-  }
-  .hero-inner{max-width:760px;position:relative;}
-  .eyebrow{
-    display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;
-    color:var(--blue-dark);background:var(--blue-light);padding:6px 12px;border-radius:999px;
-    margin-bottom:16px;letter-spacing:0.2px;
-  }
-  .eyebrow svg{width:13px;height:13px;}
-  .hero h1{
-    font-size:39px;line-height:1.14;margin:0 0 14px;font-weight:700;
-    color:var(--text);letter-spacing:-0.5px;
-  }
-  .hero h1 .accent{
-    background:linear-gradient(120deg,var(--grad-a),var(--grad-b));
-    -webkit-background-clip:text;background-clip:text;color:transparent;
-  }
-  .hero p{font-size:16px;color:var(--muted);line-height:1.65;max-width:620px;margin:0;}
-
-  .hero-deco{position:absolute;right:60px;top:30px;width:280px;height:220px;pointer-events:none;}
-  .hero-dots{
-    position:absolute;right:0;top:0;width:280px;height:220px;
-    background-image:radial-gradient(circle, var(--muted-soft) 1.3px, transparent 1.3px);
-    background-size:15px 15px;opacity:0.35;
-    -webkit-mask-image:radial-gradient(circle at 70% 30%, black 40%, transparent 75%);
-    mask-image:radial-gradient(circle at 70% 30%, black 40%, transparent 75%);
-  }
-  .float-card{
-    position:absolute;background:var(--card);border-radius:16px;box-shadow:var(--shadow-lift);
-    display:flex;align-items:center;justify-content:center;border:1px solid var(--border-soft);
-    animation:bob 5s ease-in-out infinite;
-  }
-  .float-card.search{width:64px;height:64px;left:26px;top:70px;transform:rotate(-4deg);animation-delay:0s;}
-  .float-card.search svg{width:26px;height:26px;color:var(--blue);}
-  .float-card.chat{width:76px;height:58px;right:6px;top:14px;border-radius:16px 16px 16px 4px;animation-delay:0.6s;}
-  .float-card.chat svg{width:24px;height:24px;color:var(--violet);}
-  .float-card.play{width:54px;height:54px;right:76px;bottom:2px;border-radius:14px;animation-delay:1.2s;}
-  .float-card.play svg{width:18px;height:18px;color:var(--blue);}
-  @keyframes bob{0%,100%{transform:translateY(0) rotate(var(--r,0deg));}50%{transform:translateY(-9px) rotate(var(--r,0deg));}}
-  .float-card.search{--r:-4deg;}
-
-  /* ---------- layout grid ---------- */
-  .grid{
-    display:grid;grid-template-columns:1.15fr 1.25fr 1fr;gap:22px;
-    padding:26px 32px 44px;align-items:start;
-  }
-  @media(max-width:1100px){ .grid{grid-template-columns:1fr;} .hero-deco{display:none;} }
-  .col{display:flex;flex-direction:column;gap:22px;}
-
-  .card{
-    background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);
-    padding:22px;box-shadow:var(--shadow);
-    transition:background 0.35s ease, border-color 0.35s ease, box-shadow 0.25s ease, transform 0.25s ease;
-    opacity:0;transform:translateY(10px);
-    animation:rise 0.6s ease forwards;
-  }
-  .card:hover{box-shadow:var(--shadow-lift);}
-  @keyframes rise{to{opacity:1;transform:translateY(0);}}
-  .col:nth-child(1) .card:nth-child(1){animation-delay:0.05s;}
-  .col:nth-child(1) .card:nth-child(2){animation-delay:0.2s;}
-  .col:nth-child(2) .card:nth-child(1){animation-delay:0.12s;}
-  .col:nth-child(2) .card:nth-child(2){animation-delay:0.28s;}
-  .col:nth-child(3) .card:nth-child(1){animation-delay:0.18s;}
-
-  .card-head{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
-  .step-num{
-    width:24px;height:24px;border-radius:50%;
-    background:linear-gradient(135deg,var(--grad-a),var(--blue-dark));color:#fff;font-size:12.5px;font-weight:700;
-    display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  }
-  .card-head h3{margin:0;font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px;color:var(--text);}
-  .card-head h3 svg{width:16px;height:16px;color:var(--blue);}
-  .card-sub{font-size:13px;color:var(--muted);margin:-10px 0 16px;}
-
-  /* tabs */
-  .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:18px;}
-  .tab{
-    flex:1;text-align:center;padding:10px 0;font-size:13.5px;font-weight:600;color:var(--muted);
-    border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;
-    transition:color 0.2s ease;
-  }
-  .tab.active{color:var(--blue);border-color:var(--blue);}
-  .tab-panel{display:none;}
-  .tab-panel.active{display:block;animation:fadein 0.3s ease;}
-  @keyframes fadein{from{opacity:0;}to{opacity:1;}}
-
-  .field-label{font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;display:block;}
-  .input-with-icon{
-    display:flex;align-items:center;gap:8px;
-    border:1px solid var(--border);border-radius:var(--radius-sm);
-    padding:10px 12px;margin-bottom:16px;background:var(--bg-soft);
-    transition:border-color 0.2s ease, box-shadow 0.2s ease;
-  }
-  .input-with-icon:focus-within{border-color:var(--blue);box-shadow:var(--ring);}
-  .input-with-icon svg{width:15px;height:15px;color:var(--muted-soft);flex-shrink:0;}
-  .input-with-icon select{
-    border:none;outline:none;background:transparent;width:100%;font-size:13.5px;color:var(--text);
-  }
-  .input-with-icon input{
-    border:none;outline:none;background:transparent;width:100%;font-size:13.5px;color:var(--text);
-  }
-  .input-with-icon input::placeholder{color:var(--muted-soft);}
-
-  .dropzone{
-    border:1.5px dashed var(--border);border-radius:var(--radius-sm);
-    padding:26px 12px;text-align:center;margin-bottom:16px;background:var(--bg-soft);
-    transition:border-color 0.2s ease, background 0.2s ease;
-  }
-  .dropzone:hover{border-color:var(--blue);background:var(--blue-light);}
-  .dropzone svg{width:24px;height:24px;color:var(--muted-soft);margin-bottom:8px;}
-  .dropzone p{margin:0;font-size:13px;color:var(--muted);}
-  .dropzone .small{font-size:11.5px;color:var(--muted-soft);margin-top:4px;}
-
-  .checks{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
-  .check-box{
-    border:1.5px solid var(--border);background:var(--bg-soft);
-    border-radius:var(--radius-sm);padding:9px 8px;text-align:left;width:100%;
-    transition:border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
-  }
-  .check-box:hover{transform:translateY(-1px);}
-  .check-box.checked{border-color:var(--blue);background:var(--blue-light);}
-  .check-box .row1{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--muted);}
-  .check-box.checked .row1{color:var(--blue-dark);}
-  .check-box .row1 .chk{
-    width:14px;height:14px;border-radius:4px;border:1.5px solid var(--border);background:transparent;
-    display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.15s ease;
-  }
-  .check-box.checked .row1 .chk{background:var(--blue);border-color:var(--blue);}
-  .check-box .row1 .chk svg{width:9px;height:9px;color:#fff;opacity:0;transform:scale(0.5);transition:all 0.15s ease;}
-  .check-box.checked .row1 .chk svg{opacity:1;transform:scale(1);}
-  .check-box .sub{font-size:10.5px;color:var(--muted-soft);margin-left:20px;margin-top:2px;}
-
-  .btn-block{
-    width:100%;display:flex;align-items:center;justify-content:center;gap:8px;position:relative;overflow:hidden;
-    background:linear-gradient(135deg,var(--grad-a),var(--blue-dark));
-    color:#fff;border:none;padding:12px;border-radius:var(--radius-sm);
-    font-weight:700;font-size:14px;margin-bottom:16px;
-    transition:transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-  }
-  .btn-block:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(52,102,255,0.3);}
-  .btn-block:disabled{opacity:0.75;cursor:progress;transform:none;}
-  .btn-block svg{width:15px;height:15px;}
-
-  .status-box{border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;}
-  .status-box p.label{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text);}
-  .status-pill{
-    display:inline-flex;align-items:center;gap:8px;background:var(--blue-light);
-    color:var(--blue-dark);font-size:12.5px;font-weight:600;padding:8px 12px;border-radius:8px;
-    transition:background 0.3s ease,color 0.3s ease;
-  }
-  .status-pill.done{background:var(--green-bg);color:var(--green-text);}
-  .spinner{
-    width:12px;height:12px;border:2px solid rgba(52,102,255,0.25);border-top-color:var(--blue-dark);
-    border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;
-  }
-  @keyframes spin{to{transform:rotate(360deg);}}
-  .progress-track{
-    height:5px;border-radius:99px;background:var(--border-soft);margin-top:10px;overflow:hidden;display:none;
-  }
-  .progress-track.show{display:block;}
-  .progress-fill{
-    height:100%;width:0%;border-radius:99px;
-    background:linear-gradient(90deg,var(--grad-a),var(--violet));
-    transition:width 0.15s linear;
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
   }
 
-  /* search bar row */
-  .search-row{display:flex;gap:10px;}
-  .search-row .input-with-icon{flex:1;margin-bottom:0;}
-  .btn-search{
-    display:flex;align-items:center;gap:6px;background:var(--blue);color:#fff;border:none;
-    padding:0 18px;border-radius:var(--radius-sm);font-weight:700;font-size:13.5px;
-    transition:transform 0.15s ease, background 0.2s ease;
+  /* ── Layout App ── */
+  .app-container {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    min-height: 100vh;
   }
-  .btn-search:hover{transform:translateY(-1px);background:var(--blue-dark);}
-  .btn-search svg{width:14px;height:14px;}
-
-  /* matches grid */
-  .matches{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-  @media(max-width:480px) { .matches { grid-template-columns: 1fr; } }
-  .match{
-    border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;
-    transition:transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-    cursor:pointer;background:var(--card);
-  }
-  .match:hover{transform:translateY(-3px);box-shadow:var(--shadow-lift);border-color:var(--blue);}
-  .match-img{position:relative;height:98px;overflow:hidden;background:#9fc4e8;}
-  .match-img img{width:100%;height:100%;object-fit:cover;}
-  .match-img svg{position:absolute;inset:0;width:100%;height:100%;}
-  .match:nth-child(2) .match-img svg{filter:hue-rotate(18deg) saturate(1.05);}
-  .match:nth-child(3) .match-img svg{filter:hue-rotate(-12deg) saturate(1.1);}
-  .match-badge{
-    position:absolute;top:6px;left:6px;background:rgba(10,13,22,0.6);color:#fff;
-    font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;backdrop-filter:blur(2px);
-  }
-  .match-time{
-    position:absolute;bottom:6px;right:6px;background:rgba(10,13,22,0.7);color:#fff;
-    font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;font-variant-numeric:tabular-nums;
-  }
-  .match-meta{display:flex;gap:6px;padding:8px;}
-  .badge{font-size:10.5px;font-weight:700;padding:3px 7px;border-radius:6px;display:inline-block;}
-  .badge.score{background:var(--green-bg);color:var(--green-text);}
-  .badge.frame{background:var(--bg-soft);color:var(--muted);border:1px solid var(--border);}
-
-  /* chatbot */
-  .chat-scroll{height:250px;overflow-y:auto;margin-bottom:14px;padding-right:2px;}
-  .chat-scroll::-webkit-scrollbar{width:5px;}
-  .chat-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
-  .chat-bubble-row{display:flex;gap:10px;margin-bottom:14px;animation:fadein 0.25s ease;}
-  .chat-bubble-row.user{flex-direction:row-reverse;}
-  .bot-avatar{
-    width:30px;height:30px;border-radius:50%;background:var(--blue-light);
-    display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  }
-  .bot-avatar svg{width:15px;height:15px;color:var(--blue);}
-  .user-avatar{
-    width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--grad-a),var(--violet));
-    display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:12px;font-weight:700;
-  }
-  .bubble{
-    background:var(--bg-soft);border-radius:12px;border-top-left-radius:2px;
-    padding:12px 14px;font-size:13.5px;color:var(--text);line-height:1.5;max-width:82%;
-  }
-  .chat-bubble-row.user .bubble{
-    background:linear-gradient(135deg,var(--grad-a),var(--blue-dark));color:#fff;
-    border-top-left-radius:12px;border-top-right-radius:2px;
-  }
-  .typing-dots{display:flex;gap:4px;padding:4px 0;}
-  .typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--muted-soft);animation:tdot 1.1s infinite ease-in-out;}
-  .typing-dots span:nth-child(2){animation-delay:0.15s;}
-  .typing-dots span:nth-child(3){animation-delay:0.3s;}
-  @keyframes tdot{0%,60%,100%{opacity:0.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-3px);}}
-
-  .chat-input-row{
-    display:flex;align-items:center;gap:8px;border:1px solid var(--border);
-    border-radius:var(--radius-sm);padding:6px 6px 6px 14px;margin-bottom:12px;
-    transition:border-color 0.2s ease, box-shadow 0.2s ease;
-  }
-  .chat-input-row:focus-within{border-color:var(--blue);box-shadow:var(--ring);}
-  .chat-input-row input{flex:1;border:none;outline:none;font-size:13.5px;background:transparent;color:var(--text);}
-  .chat-input-row input::placeholder{color:var(--muted-soft);}
-  .send-btn{
-    width:34px;height:34px;border-radius:8px;border:none;background:var(--blue);
-    color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;
-    transition:transform 0.15s ease, background 0.2s ease;
-  }
-  .send-btn:hover{transform:translateY(-1px) rotate(-4deg);background:var(--blue-dark);}
-  .send-btn svg{width:15px;height:15px;}
-  .chat-footer{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted);}
-  .chat-footer .left{display:flex;align-items:center;gap:6px;}
-  .chat-footer svg{width:13px;height:13px;}
-  .btn-ghost{
-    display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);
-    padding:7px 12px;border-radius:8px;color:var(--text);font-weight:600;font-size:12px;
-    transition:background 0.2s ease, transform 0.15s ease;
-  }
-  .btn-ghost:hover{background:var(--bg-soft);transform:translateY(-1px);}
-
-  /* stats card */
-  .stat-row{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:9px 0;border-bottom:1px solid var(--border-soft);font-size:13.5px;
-  }
-  .stat-row:last-child{border-bottom:none;}
-  .stat-row .left{display:flex;align-items:center;gap:9px;color:var(--text);font-weight:500;}
-  .stat-row .left svg{width:15px;height:15px;color:var(--blue);}
-  .stat-row .val{font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;}
-
-  .validation-box{
-    background:var(--bg-soft);border:1px solid var(--border);border-radius:var(--radius-md);
-    padding:14px;margin-top:16px;
-  }
-  .validation-box .title{font-size:12.5px;font-weight:700;color:var(--text);margin:0 0 10px;}
-  .validation-row{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0;color:var(--muted);}
-  .validation-row b{color:var(--text);font-weight:700;}
-
-  .quick-guide{margin-top:18px;}
-  .quick-guide .title{
-    display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:700;margin-bottom:12px;color:var(--text);
-  }
-  .quick-guide .title svg{width:15px;height:15px;color:#f5a623;}
-  .qg-item{display:flex;gap:10px;font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.4;}
-  .qg-num{
-    width:18px;height:18px;border-radius:50%;background:var(--blue-light);color:var(--blue-dark);
-    font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;
+  @media(max-width: 1024px) {
+    .app-container { grid-template-columns: 70px 1fr; }
+    .sidebar span { display: none; }
+    .sidebar .logo span { display: none; }
   }
 
-  /* footer */
-  footer.bottom{
-    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
-    padding:16px 32px;border-top:1px solid var(--border);background:var(--card);
-    font-size:13px;color:var(--muted);transition:background 0.35s ease, border-color 0.35s ease;
+  /* ── Sidebar ── */
+  .sidebar {
+    background: var(--card);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 24px 16px;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    transition: background 0.35s ease, border-color 0.35s ease;
   }
-  footer.bottom .side{display:flex;align-items:center;gap:22px;}
-  footer.bottom a{display:flex;align-items:center;gap:6px;font-weight:500;transition:color 0.2s ease;}
-  footer.bottom a:hover{color:var(--blue);}
-  footer.bottom svg{width:14px;height:14px;}
+  .sidebar .logo {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-weight: 700;
+    font-size: 19px;
+    margin-bottom: 30px;
+    padding: 0 8px;
+  }
+  .sidebar .logo .tri {
+    width: 27px;
+    height: 27px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--grad-a), var(--grad-b));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(52,102,255,0.35);
+  }
+  .sidebar .logo .tri svg { width: 13px; height: 13px; fill: #fff; }
+  .sidebar .logo span { color: var(--blue-dark); }
 
-  :focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
+  .nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 14px;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-md);
+    color: var(--muted);
+    font-size: 14.5px;
+    font-weight: 600;
+    text-align: left;
+    transition: all 0.2s ease;
+  }
+  .nav-btn:hover {
+    color: var(--text);
+    background: var(--bg-soft);
+    transform: translateX(2px);
+  }
+  .nav-btn.active {
+    color: var(--blue);
+    background: var(--blue-light);
+  }
+  .nav-btn i { font-size: 18px; }
+  .nav-spacer { flex: 1; }
+
+  /* ── Main Area ── */
+  .main-content {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Topbar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 32px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    transition: background 0.35s ease, border-color 0.35s ease;
+  }
+  .topbar-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .topbar-badges {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .topbar-badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 700;
+    background: var(--blue-light);
+    color: var(--blue-dark);
+    border: 1px solid var(--border-soft);
+  }
+  .topbar-badge.success {
+    background: var(--green-bg);
+    color: var(--green-text);
+  }
+
+  /* ── Main Views Grid ── */
+  .content-padding {
+    padding: 26px 32px 44px;
+    flex: 1;
+  }
+  .page-view {
+    display: none;
+    animation: fadein 0.35s ease;
+  }
+  .page-view.active {
+    display: block;
+  }
+  @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+  /* ── Cards & Panels ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 22px;
+    box-shadow: var(--shadow);
+    margin-bottom: 22px;
+    transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.25s ease, transform 0.25s ease;
+  }
+  .card:hover { box-shadow: var(--shadow-lift); }
+  .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .step-num {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--grad-a), var(--blue-dark));
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .card-head h3 { margin: 0; font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; color: var(--text); }
+  .card-head h3 svg, .card-head h3 i { width: 18px; height: 18px; color: var(--blue); }
+  .card-sub { font-size: 13px; color: var(--muted); margin: -10px 0 16px; }
+
+  /* ── Stats Layout ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 22px;
+  }
+  @media(max-width: 768px) {
+    .stats-row { grid-template-columns: 1fr; }
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    box-shadow: var(--shadow);
+    transition: all 0.25s ease;
+  }
+  .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+  .stat-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+  .stat-value { font-size: 22px; font-weight: 700; color: var(--text); }
+  .stat-delta { font-size: 11px; margin-top: 4px; color: var(--muted-soft); font-weight: 500; }
+  .stat-delta.blue { color: var(--blue); }
+  .stat-delta.green { color: var(--green-text); }
+
+  /* ── Layout Columns ── */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 22px;
+  }
+  @media(max-width: 1024px) {
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+
+  /* ── Inputs, Fields, & Tabs ── */
+  .field-label { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; display: block; }
+  .input-with-icon {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-bottom: 16px;
+    background: var(--bg-soft);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .input-with-icon:focus-within { border-color: var(--blue); box-shadow: var(--ring); }
+  .input-with-icon svg, .input-with-icon i { width: 16px; height: 16px; color: var(--muted-soft); flex-shrink: 0; }
+  .input-with-icon input, .input-with-icon select {
+    border: none; outline: none; background: transparent; width: 100%; font-size: 13.5px; color: var(--text);
+  }
+  .input-with-icon input::placeholder { color: var(--muted-soft); }
+
+  .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+  .tab {
+    flex: 1; text-align: center; padding: 10px 0; font-size: 13.5px; font-weight: 600; color: var(--muted);
+    border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none;
+    transition: color 0.2s ease;
+  }
+  .tab.active { color: var(--blue); border-color: var(--blue); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; animation: fadein 0.3s ease; }
+
+  /* ── Dropzone & Checks ── */
+  .dropzone {
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius-sm);
+    padding: 26px 12px;
+    text-align: center;
+    margin-bottom: 16px;
+    background: var(--bg-soft);
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+  .dropzone:hover { border-color: var(--blue); background: var(--blue-light); }
+  .dropzone svg, .dropzone i { width: 26px; height: 26px; color: var(--muted-soft); margin-bottom: 8px; }
+  .dropzone p { margin: 0; font-size: 13px; color: var(--muted); }
+  .dropzone .small { font-size: 11.5px; color: var(--muted-soft); margin-top: 4px; }
+
+  .checks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+  .check-box {
+    border: 1.5px solid var(--border);
+    background: var(--bg-soft);
+    border-radius: var(--radius-sm);
+    padding: 9px 8px;
+    text-align: left;
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+  }
+  .check-box:hover { transform: translateY(-1px); }
+  .check-box.checked { border-color: var(--blue); background: var(--blue-light); }
+  .check-box .row1 { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+  .check-box.checked .row1 { color: var(--blue-dark); }
+  .check-box .row1 .chk {
+    width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--border); background: transparent;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s ease;
+  }
+  .check-box.checked .row1 .chk { background: var(--blue); border-color: var(--blue); }
+  .check-box .row1 .chk svg { width: 9px; height: 9px; color: #fff; opacity: 0; transform: scale(0.5); transition: all 0.15s ease; }
+  .check-box.checked .row1 .chk svg { opacity: 1; transform: scale(1); }
+  .check-box .sub { font-size: 10.5px; color: var(--muted-soft); margin-left: 20px; margin-top: 2px; }
+
+  /* ── Buttons ── */
+  .btn-primary {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: linear-gradient(135deg, var(--grad-a), var(--blue-dark));
+    color: #fff; border: none; padding: 11px 18px; border-radius: var(--radius-sm);
+    font-weight: 700; font-size: 14px; box-shadow: 0 4px 12px rgba(52,102,255,0.25);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(52,102,255,0.35); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+  .btn-primary svg, .btn-primary i { width: 15px; height: 15px; }
+
+  .btn-block { width: 100%; margin-bottom: 16px; }
+
+  /* ── Status & Progress ── */
+  .status-box { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; }
+  .status-box p.label { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--text); }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 8px; background: var(--blue-light);
+    color: var(--blue-dark); font-size: 12.5px; font-weight: 600; padding: 8px 12px; border-radius: 8px;
+  }
+  .status-pill.done { background: var(--green-bg); color: var(--green-text); }
+  .spinner {
+    width: 12px; height: 12px; border: 2px solid rgba(52,102,255,0.25); border-top-color: var(--blue-dark);
+    border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  
+  .progress-track { height: 5px; border-radius: 99px; background: var(--border-soft); margin-top: 10px; overflow: hidden; display: none; }
+  .progress-track.show { display: block; }
+  .progress-fill {
+    height: 100%; width: 0%; border-radius: 99px;
+    background: linear-gradient(90deg, var(--grad-a), var(--violet));
+    transition: width 0.15s linear;
+  }
+
+  /* ── Video Lists & Tables ── */
+  .video-row { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-soft); }
+  .video-row:last-child { border-bottom: none; }
+  .video-thumb { width: 48px; height: 32px; background: var(--blue-light); border-radius: 6px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .video-thumb i { font-size: 14px; color: var(--blue-dark); }
+  .video-info { flex: 1; min-width: 0; }
+  .video-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+  .video-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .pill { font-size: 10.5px; padding: 2px 8px; border-radius: 20px; font-weight: 600; flex-shrink: 0; }
+  .pill.indexed { background: var(--green-bg); color: var(--green-text); }
+  .pill.running { background: var(--blue-light); color: var(--blue-dark); }
+  .btn-icon { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 5px 8px; border-radius: 6px; transition: all 0.2s ease; }
+  .btn-icon:hover { color: var(--text); background: var(--bg-soft); border-color: var(--muted-soft); }
+
+  /* ── Timeline items ── */
+  .timeline-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border-soft); align-items: flex-start; }
+  .timeline-item:last-child { border-bottom: none; }
+  .timeline-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); flex-shrink: 0; margin-top: 4px; }
+  .timeline-dot.green { background: var(--green-text); }
+  .timeline-dot.amber { background: #d97706; }
+  .timeline-ts { font-size: 11.5px; color: var(--muted-soft); min-width: 44px; flex-shrink: 0; font-weight: 600; }
+  .timeline-text { font-size: 12.5px; color: var(--text); line-height: 1.4; }
+
+  /* ── Validation Box bars ── */
+  .bar-wrap { margin-bottom: 12px; }
+  .bar-label { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text); margin-bottom: 4px; font-weight: 500; }
+  .bar-track { height: 6px; background: var(--bg-soft); border-radius: 3px; overflow: hidden; border: 1px solid var(--border-soft); }
+  .bar-fill { height: 100%; border-radius: 3px; background: var(--blue); }
+
+  /* ── Search Page elements ── */
+  .search-row { display: flex; gap: 10px; }
+  .search-row .input-with-icon { flex: 1; margin-bottom: 0; }
+  
+  /* Matches grid */
+  .matches-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 22px; }
+  @media(max-width: 768px) {
+    .matches-grid { grid-template-columns: 1fr; }
+  }
+  .match-card { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--card); transition: all 0.2s ease; cursor: pointer; }
+  .match-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); border-color: var(--blue); }
+  .match-img { position: relative; height: 140px; overflow: hidden; background: var(--bg-soft); display: flex; align-items: center; justify-content: center; }
+  .match-img img { width: 100%; height: 100%; object-fit: cover; }
+  .match-badge { position: absolute; top: 8px; left: 8px; background: rgba(10,13,22,0.65); color: #fff; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 6px; backdrop-filter: blur(4px); }
+  .match-time { position: absolute; bottom: 8px; right: 8px; background: rgba(10,13,22,0.75); color: #fff; font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 4px; font-variant-numeric: tabular-nums; }
+  .match-meta { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px; border-bottom: 1px solid var(--border-soft); }
+  .badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 3px; }
+  .badge.score { background: var(--green-bg); color: var(--green-text); }
+  .badge.frame { background: var(--bg-soft); color: var(--muted); border: 1px solid var(--border); }
+  .badge.audio { background: #eeedfe; color: #3c3489; }
+  .badge.ocr { background: #e2f4ea; color: #166e3f; }
+  .match-body { padding: 12px; }
+  .match-body p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+
+  /* ── Chat Page elements ── */
+  .chat-scroll { height: 350px; overflow-y: auto; margin-bottom: 18px; padding-right: 4px; }
+  .chat-scroll::-webkit-scrollbar { width: 5px; }
+  .chat-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+  .chat-bubble-row { display: flex; gap: 10px; margin-bottom: 14px; animation: fadein 0.25s ease; }
+  .chat-bubble-row.user { flex-direction: row-reverse; }
+  .bot-avatar {
+    width: 32px; height: 32px; border-radius: 50%; background: var(--blue-light);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .bot-avatar svg, .bot-avatar i { width: 16px; height: 16px; color: var(--blue); }
+  .user-avatar {
+    width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--grad-a), var(--violet));
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #fff; font-size: 12.5px; font-weight: 700;
+  }
+  .bubble {
+    background: var(--bg-soft); border-radius: 12px; border-top-left-radius: 2px;
+    padding: 12px 14px; font-size: 13.5px; color: var(--text); line-height: 1.5; max-width: 80%;
+  }
+  .chat-bubble-row.user .bubble {
+    background: linear-gradient(135deg, var(--grad-a), var(--blue-dark)); color: #fff;
+    border-top-left-radius: 12px; border-top-right-radius: 2px;
+  }
+  .typing-dots { display: flex; gap: 4px; padding: 4px 0; }
+  .typing-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--muted-soft); animation: tdot 1.1s infinite ease-in-out; }
+  .typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes tdot { 0%,60%,100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+
+  .chat-input-row {
+    display: flex; align-items: center; gap: 8px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 6px 6px 6px 14px; margin-bottom: 14px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .chat-input-row:focus-within { border-color: var(--blue); box-shadow: var(--ring); }
+  .chat-input-row input { flex: 1; border: none; outline: none; font-size: 13.5px; background: transparent; color: var(--text); }
+  .chat-input-row input::placeholder { color: var(--muted-soft); }
+  .send-btn {
+    width: 36px; height: 36px; border-radius: 8px; border: none; background: var(--blue);
+    color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    transition: transform 0.15s ease, background 0.2s ease;
+  }
+  .send-btn:hover { transform: translateY(-1px) rotate(-4deg); background: var(--blue-dark); }
+  .send-btn svg, .send-btn i { width: 16px; height: 16px; }
+  .chat-footer { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--muted); }
+  .chat-footer .left { display: flex; align-items: center; gap: 6px; }
+  .chat-footer svg, .chat-footer i { width: 14px; height: 14px; }
+  .btn-ghost {
+    display: flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border);
+    padding: 7px 12px; border-radius: 8px; color: var(--text); font-weight: 600; font-size: 12px;
+    transition: background 0.2s ease, transform 0.15s ease;
+  }
+  .btn-ghost:hover { background: var(--bg-soft); transform: translateY(-1px); }
+
+  /* ── Library page code blocks ── */
+  .lib-block {
+    background: var(--bg-soft); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px; font-family: monospace; font-size: 12.5px; color: var(--text);
+    margin-bottom: 16px; line-height: 1.6; overflow-x: auto;
+  }
+  .lib-block .cmt { color: var(--muted); }
+  .lib-block .kw { color: var(--blue-dark); font-weight: 600; }
+  .lib-block .str { color: var(--green-text); }
+
+  /* ── Billing Cards ── */
+  .tier-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 18px; }
+  @media(max-width: 768px) {
+    .tier-row { grid-template-columns: 1fr; }
+  }
+  .tier-card { border: 1px solid var(--border); border-radius: 12px; padding: 22px; background: var(--card); transition: all 0.25s ease; }
+  .tier-card.featured { border: 2px solid var(--blue); box-shadow: var(--shadow-lift); }
+  .tier-name { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .tier-price { font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 12px; }
+  .tier-price span { font-size: 13px; color: var(--muted); font-weight: 400; }
+  .tier-feat { font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+
+  /* ── Footer ── */
+  footer.bottom {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+    padding: 16px 32px; border-top: 1px solid var(--border); background: var(--card);
+    font-size: 13px; color: var(--muted); transition: background 0.35s ease, border-color 0.35s ease;
+  }
+  footer.bottom .side { display: flex; align-items: center; gap: 22px; }
+  footer.bottom a { display: flex; align-items: center; gap: 6px; font-weight: 500; transition: color 0.2s ease; }
+  footer.bottom a:hover { color: var(--blue); }
+  footer.bottom svg, footer.bottom i { width: 14px; height: 14px; }
+
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 </style>
 </head>
 <body>
 
-<!-- ================= HEADER ================= -->
-<header class="top">
-  <div class="logo">
-    <div class="tri"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg></div>
-    <span>ADVE</span>
-  </div>
-  <nav class="main-nav">
-    <a href="#" class="active">Overview</a>
-    <a href="#">Search</a>
-    <a href="#">Chat</a>
-    <a href="#">Docs</a>
-    <a href="https://github.com/asmitha2025/ADVE" target="_blank">GitHub
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
-    </a>
-  </nav>
-  <div class="top-right">
-    <button class="icon-btn" id="themeToggle" aria-label="Toggle dark mode">
-      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
+<div class="app-container">
+  
+  <!-- ================= SIDEBAR ================= -->
+  <div class="sidebar">
+    <div class="logo">
+      <div class="tri"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg></div>
+      <span>ADVE</span>
+    </div>
+    
+    <button class="nav-btn active" data-page="dashboard">
+      <i class="ti ti-smart-home" aria-hidden="true"></i>
+      <span>Dashboard</span>
     </button>
-    <button class="btn-primary" id="heroIndexBtn">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
-      Start Indexing
+    <button class="nav-btn" data-page="index">
+      <i class="ti ti-upload" aria-hidden="true"></i>
+      <span>Index Videos</span>
+    </button>
+    <button class="nav-btn" data-page="search">
+      <i class="ti ti-search" aria-hidden="true"></i>
+      <span>Search Moments</span>
+    </button>
+    <button class="nav-btn" data-page="chat">
+      <i class="ti ti-messages" aria-hidden="true"></i>
+      <span>Video Chatbot</span>
+    </button>
+    <button class="nav-btn" data-page="analytics">
+      <i class="ti ti-chart-bar" aria-hidden="true"></i>
+      <span>Analytics</span>
+    </button>
+    <button class="nav-btn" data-page="library">
+      <i class="ti ti-box" aria-hidden="true"></i>
+      <span>Pip Library</span>
+    </button>
+    <button class="nav-btn" data-page="api">
+      <i class="ti ti-lock-open" aria-hidden="true"></i>
+      <span>API Keys</span>
+    </button>
+    
+    <div class="nav-spacer"></div>
+    
+    <button class="nav-btn" data-page="billing">
+      <i class="ti ti-credit-card" aria-hidden="true"></i>
+      <span>Billing</span>
+    </button>
+    <button class="nav-btn" data-page="settings">
+      <i class="ti ti-settings" aria-hidden="true"></i>
+      <span>Settings</span>
     </button>
   </div>
-</header>
 
-<!-- ================= HERO ================= -->
-<section class="hero">
-  <div class="hero-inner">
-    <span class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>Up to 90% fewer vision-network calls</span>
-    <h1>ADVE — <span class="accent">Semantic Video Search</span> &amp; Chatbot</h1>
-    <p>Anchor-Delta Video Embedding (ADVE) reduces neural vision network calls by up to 90% via motion-adaptive keyframe processing for semantic scene search and video Q&amp;A.</p>
-  </div>
-  <div class="hero-deco">
-    <div class="hero-dots"></div>
-    <div class="float-card search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
-    <div class="float-card chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg></div>
-    <div class="float-card play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
-  </div>
-</section>
-
-<!-- ================= MAIN GRID ================= -->
-<div class="grid">
-
-  <!-- ===== COLUMN 1 ===== -->
-  <div class="col">
-
-    <!-- Card 1: Video Ingestion -->
-    <div class="card">
-      <div class="card-head">
-        <div class="step-num">1</div>
-        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 17.58A5 5 0 0018 8h-1.26A8 8 0 104 16.25"/><path d="M12 12v9"/><path d="M9 18l3 3 3-3"/></svg>Video Ingestion &amp; Indexing</h3>
-      </div>
-
-      <div class="tabs">
-        <button class="tab active" data-tab="yt">YouTube URL</button>
-        <button class="tab" data-tab="local">Local Upload</button>
-        <button class="tab" data-tab="stream">Live Stream</button>
-      </div>
-
-      <div class="tab-panel active" id="panel-yt">
-        <label class="field-label">YouTube Video URL</label>
-        <div class="input-with-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.07 0l1.93-1.93a5 5 0 00-7.07-7.07L10.5 5.44"/><path d="M14 11a5 5 0 00-7.07 0l-1.93 1.93a5 5 0 007.07 7.07L13.5 18.56"/></svg>
-          <input type="text" id="youtube-url-input" placeholder="https://www.youtube.com/watch?v=...">
-        </div>
-      </div>
-
-      <div class="tab-panel" id="panel-local">
-        <label class="field-label">Video File</label>
-        <div class="dropzone" style="cursor:pointer;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
-          <p>Drag &amp; drop a video, or click to browse</p>
-          <p class="small">MP4, MOV, MKV up to 4GB</p>
-          <input type="file" id="video-file-input" style="display:none;" accept="video/*">
-        </div>
-      </div>
-
-      <div class="tab-panel" id="panel-stream">
-        <label class="field-label">Camera Identifier</label>
-        <div class="input-with-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-          <input type="text" id="camera-id-input" placeholder="e.g. camera_lobby_01">
-        </div>
-        <label class="field-label">RTSP Connection URL</label>
-        <div class="input-with-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.07 0l1.93-1.93a5 5 0 00-7.07-7.07L10.5 5.44"/><path d="M14 11a5 5 0 00-7.07 0l-1.93 1.93a5 5 0 007.07 7.07L13.5 18.56"/></svg>
-          <input type="text" id="rtsp-url-input" placeholder="rtsp://192.168.1.100:554/stream">
-        </div>
-      </div>
-
-      <div class="checks">
-        <button class="check-box checked" data-check="fps">
-          <div class="row1"><span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Adaptive FPS</div>
-          <div class="sub">Motion-adaptive</div>
+  <!-- ================= MAIN AREA ================= -->
+  <div class="main-content">
+    
+    <!-- Topbar -->
+    <div class="topbar">
+      <span class="topbar-title" id="topbar-page-title">Dashboard</span>
+      <div class="topbar-badges">
+        <span class="topbar-badge" id="topbar-savings-badge">96.7% encoder savings</span>
+        <span class="topbar-badge success">0.992 cosine sim</span>
+        <button class="icon-btn" id="themeToggle" style="border:none;background:none;padding:5px;display:inline-flex;align-items:center;" aria-label="Toggle dark mode">
+          <i class="ti ti-sun sun" style="font-size:18px;color:var(--text);" aria-hidden="true"></i>
+          <i class="ti ti-moon moon" style="font-size:18px;color:var(--text);display:none;" aria-hidden="true"></i>
         </button>
-        <button class="check-box checked" data-check="whisper">
-          <div class="row1"><span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Whisper</div>
-          <div class="sub">Transcripts</div>
-        </button>
-        <button class="check-box checked" data-check="ocr">
-          <div class="row1"><span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>EasyOCR</div>
-          <div class="sub">OCR Text</div>
-        </button>
-      </div>
-
-      <button class="btn-block" id="indexBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/></svg>
-        <span>Index Video</span>
-      </button>
-
-      <div class="status-box">
-        <p class="label">Indexing Output Status</p>
-        <div class="status-pill" id="statusPill"><span class="spinner"></span><span id="statusText">Waiting to index...</span></div>
-        <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill"></div></div>
       </div>
     </div>
 
-    <!-- Card 3: Semantic Scene Search -->
-    <div class="card">
-      <div class="card-head">
-        <div class="step-num">3</div>
-        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Semantic Scene Search</h3>
-      </div>
-      <label class="field-label">Describe the scene you're looking for</label>
-      <div class="search-row">
-        <div class="input-with-icon">
-          <input type="text" id="sceneSearchInput" placeholder="E.g., a person typing on a laptop in a cafe">
-        </div>
-        <button class="btn-search" id="sceneSearchBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-          Search
-        </button>
-      </div>
+    <!-- Content Margin -->
+    <div class="content-padding">
 
-      <div style="margin-top: 14px;">
-        <label class="field-label">Filter by Video Source</label>
-        <div class="input-with-icon" style="background:var(--bg-soft);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>
-          <select id="search-camera-filter" style="border:none;outline:none;background:transparent;width:100%;font-size:13.5px;color:var(--text);font-family:inherit;cursor:pointer;">
-            <option value="">-- All Videos & Streams --</option>
-          </select>
+      <!-- ================= VIEW: DASHBOARD ================= -->
+      <div class="page-view active" id="view-dashboard">
+        <!-- Stats Row -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-label">Total Embeddings</div>
+            <div class="stat-value" id="stats-total">0</div>
+            <div class="stat-delta blue" id="stats-deltas-sub">0 delta frames</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Videos Indexed</div>
+            <div class="stat-value" id="stats-videos-count">0</div>
+            <div class="stat-delta green" id="stats-videos-sub">+0 this week</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Encoder Savings</div>
+            <div class="stat-value" id="stats-savings">0%</div>
+            <div class="stat-delta blue">vs full visual baseline</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Index File Size</div>
+            <div class="stat-value" id="stats-size">0 MB</div>
+            <div class="stat-delta green">FAISS index capacity</div>
+          </div>
         </div>
-      </div>
 
-      <div style="margin-top: 14px;">
-        <button class="btn-ghost" id="toggleAdvancedSearch" style="width:100%;justify-content:center;font-size:12.5px;">⚙️ Advanced Search Options</button>
-        <div id="advancedSearchPanel" style="display:none;margin-top:14px;border:1px solid var(--border-soft);padding:14px;border-radius:var(--radius-sm);background:var(--bg-soft);flex-direction:column;gap:12px;width:100%;">
-          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;width:100%;gap:10px;">
-            <label style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;">
-              <input type="checkbox" id="search-anchor-only" style="width:15px;height:15px;cursor:pointer;">
-              CLIP Anchors Only
-            </label>
-            <label style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;">
-              <input type="checkbox" id="search-temporal-dedup" checked style="width:15px;height:15px;cursor:pointer;">
-              Temporal Dedup (8s)
-            </label>
+        <!-- Inner Columns -->
+        <div class="grid-2">
+          <!-- Recent Videos Card -->
+          <div class="card">
+            <div class="card-head">
+              <h3><i class="ti ti-history" aria-hidden="true"></i>Recent Videos</h3>
+            </div>
+            <p class="card-sub">Recently processed camera feeds and visual uploads.</p>
+            <div id="recent-videos-list">
+              <div style="font-size:13px;color:var(--muted);text-align:center;padding:20px 0;">No videos indexed yet. Go to the Ingestion tab to add one.</div>
+            </div>
           </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;margin-top:4px;">
-            <span style="color:var(--text);white-space:nowrap;">Min Similarity: <span id="val-min-similarity" style="color:var(--blue);font-weight:600;">0.35</span></span>
-            <input type="range" id="search-min-similarity" min="0.0" max="0.95" step="0.05" value="0.35" style="width:120px;cursor:pointer;" oninput="document.getElementById('val-min-similarity').innerText = parseFloat(this.value).toFixed(2)">
+
+          <!-- Event Timeline Card -->
+          <div class="card">
+            <div class="card-head">
+              <h3><i class="ti ti-activity" aria-hidden="true"></i>Event Timeline</h3>
+            </div>
+            <p class="card-sub">Recent activity logs from your deployed instances.</p>
+            <div id="timeline-list">
+              <div class="timeline-item"><div class="timeline-dot green"></div><div class="timeline-ts">12:30</div><div class="timeline-text">FastAPI server initialized successfully. All models warmed up.</div></div>
+              <div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-ts">12:20</div><div class="timeline-text">Loaded spatial reconstructor checkpoints from <b>best_model.pt</b></div></div>
+            </div>
           </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;margin-top:4px;">
-            <span>Top Results (K):</span>
-            <input type="number" id="search-k" value="8" min="1" max="50" style="width:60px;border:1px solid var(--border);border-radius:6px;padding:3px 6px;background:var(--card);color:var(--text);">
+        </div>
+
+        <!-- Validation Reference -->
+        <div class="card">
+          <div class="card-head">
+            <h3><i class="ti ti-shield-check" aria-hidden="true"></i>Validation Reference</h3>
           </div>
-          <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px;display:flex;flex-direction:column;gap:8px;width:100%;">
-            <span style="font-size:12px;color:var(--muted);">Or query by reference image:</span>
-            <input type="file" id="search-image-file" style="display:none;" accept="image/*" onchange="searchImage(this.files[0])">
-            <button class="btn-ghost" style="width:100%;justify-content:center;" onclick="document.getElementById('search-image-file').click()">📂 Upload Reference Image</button>
+          <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:16px;">
+            <div class="bar-wrap">
+              <div class="bar-label"><span>Synthetic Video</span><span>96.67% savings</span></div>
+              <div class="bar-track"><div class="bar-fill" style="width:96.67%;"></div></div>
+            </div>
+            <div class="bar-wrap">
+              <div class="bar-label"><span>MOT17 Tracking</span><span>60.33% savings</span></div>
+              <div class="bar-track"><div class="bar-fill" style="width:60.33%;"></div></div>
+            </div>
+            <div class="bar-wrap">
+              <div class="bar-label"><span>Accuracy Cosine Similarity</span><span>0.9923</span></div>
+              <div class="bar-track"><div class="bar-fill" style="width:99.23%;"></div></div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-  </div>
+      <!-- ================= VIEW: INDEX ================= -->
+      <div class="page-view" id="view-index">
+        <div class="grid-2">
+          <!-- Ingestion Card -->
+          <div class="card">
+            <div class="card-head">
+              <div class="step-num">1</div>
+              <h3><i class="ti ti-cloud-upload" aria-hidden="true"></i>Video Ingestion &amp; Indexing</h3>
+            </div>
 
-  <!-- ===== COLUMN 2 ===== -->
-  <div class="col">
+            <div class="tabs">
+              <button class="tab active" data-tab="yt">YouTube URL</button>
+              <button class="tab" data-tab="local">Local Upload</button>
+            </div>
 
-    <!-- Card 2: Search & Match Results -->
-    <div class="card">
-      <div class="card-head">
-        <div class="step-num">2</div>
-        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Search &amp; Match Results</h3>
-      </div>
-      <p class="card-sub" id="matchesSub">Top matching keyframes from your indexed videos.</p>
+            <!-- Panel: YouTube URL -->
+            <div class="tab-panel active" id="panel-yt">
+              <label class="field-label">YouTube Video URL</label>
+              <div class="input-with-icon">
+                <i class="ti ti-brand-youtube" aria-hidden="true"></i>
+                <input type="text" id="youtube-url-input" placeholder="https://www.youtube.com/watch?v=...">
+              </div>
+            </div>
 
-      <div class="matches" id="matchesGrid">
-        <div style="grid-column: span 3; text-align: center; color: var(--muted); padding: 20px;">📂 No search results. Upload a video and index it to search.</div>
-      </div>
-    </div>
+            <!-- Panel: Local Upload -->
+            <div class="tab-panel" id="panel-local">
+              <label class="field-label">Video File</label>
+              <input type="file" id="local-file-input" style="display:none;" accept="video/*">
+              <div class="dropzone" id="local-dropzone">
+                <i class="ti ti-upload" aria-hidden="true"></i>
+                <p>Drag &amp; drop a video, or click to browse</p>
+                <p class="small">MP4, WEBM, MOV, AVI up to 2GB</p>
+              </div>
+            </div>
 
-    <!-- Card 4: Chatbot -->
-    <div class="card">
-      <div class="card-head">
-        <div class="step-num">4</div>
-        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>Conversational Video Chatbot</h3>
-      </div>
+            <div class="checks">
+              <button class="check-box checked" id="chk-adaptive">
+                <div class="row1"><span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Adaptive FPS</div>
+                <div class="sub">Motion-based skip</div>
+              </button>
+              <button class="check-box" id="chk-whisper">
+                <div class="row1"><span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Whisper</div>
+                <div class="sub">Audio transcript</div>
+              </button>
+              <button class="check-box" id="chk-ocr">
+                <div class="row1"><span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>EasyOCR</div>
+                <div class="sub">Screen character</div>
+              </button>
+            </div>
 
-      <div class="chat-scroll" id="chatScroll">
-        <div class="chat-bubble-row">
-          <div class="bot-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1"/><path d="M8 13v1M16 13v1"/></svg></div>
-          <div class="bubble">Hello! Ask me anything about the indexed video. I can help you find moments, summarize content, and more.</div>
+            <button class="btn-primary btn-block" id="indexBtn">
+              <i class="ti ti-rocket" aria-hidden="true"></i>
+              <span>Index Video</span>
+            </button>
+
+            <!-- Status -->
+            <div class="status-box">
+              <p class="label">Indexing Status</p>
+              <div class="status-pill" id="statusPill"><span class="spinner" id="statusSpinner" style="display:none;"></span><span id="statusText">Waiting to index...</span></div>
+              <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill"></div></div>
+            </div>
+          </div>
+
+          <!-- Settings/Config Card -->
+          <div class="card">
+            <div class="card-head">
+              <h3><i class="ti ti-adjustments" aria-hidden="true"></i>Indexing Configurations</h3>
+            </div>
+            <div style="margin-bottom:18px;">
+              <div class="bar-label"><span>Base Target FPS</span><span id="fps-lbl">2.0 FPS</span></div>
+              <input type="range" id="param-fps" min="0.5" max="10.0" step="0.5" value="2.0" style="width:100%;margin-bottom:12px;">
+              
+              <div class="bar-label"><span>Spatial Threshold (ΔG)</span><span id="threshold-lbl">0.30</span></div>
+              <input type="range" id="param-threshold" min="0.10" max="0.60" step="0.05" value="0.30" style="width:100%;margin-bottom:12px;">
+
+              <div class="bar-label"><span>Max Delta Frames</span><span id="mdf-lbl">30</span></div>
+              <input type="range" id="param-mdf" min="5" max="120" step="5" value="30" style="width:100%;margin-bottom:12px;">
+            </div>
+            <div style="border-top:1px solid var(--border-soft);padding-top:16px;">
+              <span class="field-label">Active Models</span>
+              <div class="checks" style="grid-template-columns:1fr;gap:8px;margin-bottom:0;">
+                <div class="check-box checked" style="pointer-events:none;"><div class="row1"><span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>CLIP ViT-B/32 (512-d visual)</div></div>
+                <div class="check-box checked" style="pointer-events:none;"><div class="row1"><span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>YOLOv8n (spatial anchors)</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Deployed Index Tasks -->
+        <div class="card" id="tasks-card" style="display:none;">
+          <div class="card-head">
+            <h3><i class="ti ti-loader" aria-hidden="true"></i>Background Processing Tasks</h3>
+          </div>
+          <div id="tasks-container" style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px;">
+            <!-- Active tasks generated dynamically -->
+          </div>
+        </div>
+
+        <!-- Video index list -->
+        <div class="card">
+          <div class="card-head">
+            <h3><i class="ti ti-video" aria-hidden="true"></i>Indexed Video Database</h3>
+          </div>
+          <div id="database-videos-list">
+            <div style="font-size:13px;color:var(--muted);text-align:center;padding:12px 0;">No records found.</div>
+          </div>
         </div>
       </div>
 
-      <div class="chat-input-row">
-        <input type="text" id="chatInput" placeholder="Ask a question about the video...">
-        <button class="send-btn" id="sendBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg></button>
+      <!-- ================= VIEW: SEARCH ================= -->
+      <div class="page-view" id="view-search">
+        <div class="card">
+          <div class="card-head">
+            <div class="step-num">2</div>
+            <h3><i class="ti ti-search" aria-hidden="true"></i>Semantic Moment Retrieval</h3>
+          </div>
+          
+          <div class="search-row">
+            <div class="input-with-icon">
+              <i class="ti ti-search" aria-hidden="true"></i>
+              <input type="text" id="search-query" placeholder="Describe the scene or event in the video (e.g. 'a blue car turning left')...">
+            </div>
+            
+            <button class="btn-primary" id="searchBtn">
+              <i class="ti ti-search" aria-hidden="true"></i>
+              <span>Search</span>
+            </button>
+          </div>
+
+          <div style="display:flex;gap:16px;margin-top:14px;align-items:center;">
+            <div class="input-with-icon" style="margin-bottom:0;flex:1;">
+              <i class="ti ti-video" aria-hidden="true"></i>
+              <select id="search-camera-filter">
+                <option value="">Search across all indexed videos</option>
+              </select>
+            </div>
+            
+            <div class="input-with-icon" style="margin-bottom:0;width:180px;">
+              <i class="ti ti-eye" aria-hidden="true"></i>
+              <select id="search-signal-filter">
+                <option value="all">All signals</option>
+                <option value="visual">Visual only</option>
+                <option value="audio">Audio/Transcripts</option>
+                <option value="ocr">On-screen text</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Advanced Search settings -->
+          <div style="margin-top:14px;border-top:1px solid var(--border-soft);padding-top:14px;">
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+              <div>
+                <label class="field-label">Min Similarity</label>
+                <input type="number" id="search-min-similarity" min="0.0" max="1.0" step="0.05" value="0.0" class="input-with-icon" style="width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;background:var(--bg-soft);color:var(--text);outline:none;">
+              </div>
+              <div style="display:flex;align-items:center;padding-top:24px;">
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;">
+                  <input type="checkbox" id="search-anchor-only" style="accent-color:var(--blue);">
+                  Anchor frames only
+                </label>
+              </div>
+              <div style="display:flex;align-items:center;padding-top:24px;">
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;">
+                  <input type="checkbox" id="search-temporal-dedup" checked style="accent-color:var(--blue);">
+                  Temporal deduplication
+                </label>
+              </div>
+              <div>
+                <label class="field-label">Matches Cap (k)</label>
+                <input type="number" id="search-k" min="1" max="100" value="9" class="input-with-icon" style="width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;background:var(--bg-soft);color:var(--text);outline:none;">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Search Output Header -->
+        <h3 id="results-count-title" style="margin-bottom:14px;font-size:15px;font-weight:700;">Query Results</h3>
+
+        <!-- Matches Grid -->
+        <div class="matches-grid" id="results-container">
+          <!-- Populated dynamically -->
+          <div style="grid-column:1/-1;text-align:center;padding:40px 0;color:var(--muted);font-size:13.5px;">No searches performed yet. Enter a query above.</div>
+        </div>
+
+        <!-- Video Player Modal / Accordion -->
+        <div class="card" id="playback-card" style="display:none;">
+          <div class="card-head">
+            <h3><i class="ti ti-player-play" aria-hidden="true"></i>Video Moment Playback</h3>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+            <video id="moment-player" controls style="max-width:100%;max-height:400px;border-radius:8px;box-shadow:var(--shadow);"></video>
+            <div id="playback-title" style="font-size:13px;font-weight:600;color:var(--text);"></div>
+          </div>
+        </div>
       </div>
 
-      <div class="chat-footer">
-        <span class="left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 4.9L19 9l-4.9 1.9L12 16l-1.9-4.9L5 10l4.9-1.9z"/></svg>Powered by vision-language models</span>
-        <button class="btn-ghost" id="clearChatBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>Clear Chat</button>
+      <!-- ================= VIEW: CHATBOT ================= -->
+      <div class="page-view" id="view-chat">
+        <div class="grid-2" style="grid-template-columns:1.5fr 1fr;">
+          <!-- Chat Card -->
+          <div class="card">
+            <div class="card-head">
+              <div class="step-num">3</div>
+              <h3><i class="ti ti-message" aria-hidden="true"></i>Conversational Video Chatbot</h3>
+            </div>
+            
+            <div class="chat-scroll" id="chatScroll">
+              <div class="chat-bubble-row">
+                <div class="bot-avatar"><i class="ti ti-robot" aria-hidden="true"></i></div>
+                <div class="bubble">Hello! Select a video, and ask me anything about its scenes or spoken dialogue. I will find relevant timestamps and provide detailed answers!</div>
+              </div>
+            </div>
+
+            <!-- Chat Input -->
+            <div class="chat-input-row">
+              <input type="text" id="chatInput" placeholder="Ask a question about the video...">
+              <button class="send-btn" id="chatSendBtn"><i class="ti ti-send" aria-hidden="true"></i></button>
+            </div>
+
+            <div class="chat-footer">
+              <span class="left"><i class="ti ti-sparkles" aria-hidden="true"></i>Powered by vision-language models</span>
+              <button class="btn-ghost" id="clearChatBtn"><i class="ti ti-trash" aria-hidden="true"></i>Clear Chat</button>
+            </div>
+          </div>
+
+          <!-- Context/Chapters list -->
+          <div class="card">
+            <div class="card-head">
+              <h3><i class="ti ti-list" aria-hidden="true"></i>Auto-detected Chapters</h3>
+            </div>
+            <p class="card-sub">Dynamic segment boundaries identified from visual delta shifts.</p>
+            <div id="chapters-list">
+              <div style="font-size:13px;color:var(--muted);text-align:center;padding:24px 0;">Chapters will populate dynamically when a video is loaded.</div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <!-- ================= VIEW: ANALYTICS ================= -->
+      <div class="page-view" id="view-analytics">
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-label">Searches this Month</div>
+            <div class="stat-value">4,821</div>
+            <div class="stat-delta green">+34% vs last month</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Minutes Indexed</div>
+            <div class="stat-value">2,340 min</div>
+            <div class="stat-delta blue">39 hours of footage</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">CLIP visual calls saved</div>
+            <div class="stat-value">1.2M calls</div>
+            <div class="stat-delta green">96.7% hardware reduction</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Avg Search Latency</div>
+            <div class="stat-value">0.31s</div>
+            <div class="stat-delta green">p99 = 0.8s</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <!-- Chart Card 1 -->
+          <div class="card">
+            <div class="card-head">
+              <h3><i class="ti ti-chart-bar" aria-hidden="true"></i>Encoder Savings by Video Type</h3>
+            </div>
+            <div class="bar-wrap"><div class="bar-label"><span>CCTV / Surveillance (static)</span><span>94.2%</span></div><div class="bar-track"><div class="bar-fill" style="width:94.2%;"></div></div></div>
+            <div class="bar-wrap"><div class="bar-label"><span>Lectures / Presentations (slides)</span><span>91.5%</span></div><div class="bar-track"><div class="bar-fill" style="width:91.5%;"></div></div></div>
+            <div class="bar-wrap"><div class="bar-label"><span>Meetings / Webinars (faces)</span><span>88.0%</span></div><div class="bar-track"><div class="bar-fill" style="width:88%;"></div></div></div>
+            <div class="bar-wrap"><div class="bar-label"><span>News Broadcasts (transitions)</span><span>76.3%</span></div><div class="bar-track"><div class="bar-fill" style="width:76.3%;"></div></div></div>
+            <div class="bar-wrap"><div class="bar-label"><span>Sports / Action Film (motion)</span><span>52.1%</span></div><div class="bar-track"><div class="bar-fill" style="width:52.1%;"></div></div></div>
+          </div>
+
+          <!-- Chart Card 2 -->
+          <div class="card">
+            <div class="card-head">
+              <h3><i class="ti ti-chart-area" aria-hidden="true"></i>Reconstruction Quality vs Baseline</h3>
+            </div>
+            <div class="bar-wrap"><div class="bar-label"><span>ADVE Mean Cosine Sim (MOT17)</span><span>0.9923</span></div><div class="bar-track"><div class="bar-fill" style="width:99.23%;"></div></div></div>
+            <div class="bar-wrap"><div class="bar-label"><span>Keyframe-30 Uniform Sim</span><span>0.9762</span></div><div class="bar-track"><div class="bar-fill" style="width:97.62%;background:var(--muted-soft);"></div></div></div>
+            <div class="bar-wrap"><div class="bar-label"><span>ADVE Minimum Sim (worst case)</span><span>0.9490</span></div><div class="bar-track"><div class="bar-fill" style="width:94.9%;"></div></div></div>
+            <div class="bar-wrap"><div class="bar-label"><span>Keyframe-30 Minimum Sim (worst case)</span><span>0.9054</span></div><div class="bar-track"><div class="bar-fill" style="width:90.54%;background:var(--muted-soft);"></div></div></div>
+            <p style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.4;">ADVE consistently beats standard uniform keyframe sampling across all semantic precision metrics on equivalent network call budgets.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= VIEW: LIBRARY ================= -->
+      <div class="page-view" id="view-library">
+        <div class="card">
+          <div class="card-head">
+            <h3><i class="ti ti-box" aria-hidden="true"></i>ADVE Python Pip Library</h3>
+          </div>
+          <p class="card-sub">Run production-grade local video embeddings directly on your edge hardware without cloud subscription fees.</p>
+          
+          <div class="lib-block">
+            <span class="cmt"># Install library via pip</span><br>
+            <span class="kw">pip</span> install adve<br><br>
+            <span class="cmt"># Index any local video file</span><br>
+            <span class="kw">from</span> adve <span class="kw">import</span> VideoIndex<br><br>
+            index = VideoIndex()<br>
+            index.add(<span class="str">"cctv_footage.mp4"</span>)<br><br>
+            <span class="cmt"># Perform semantic search</span><br>
+            results = index.search(<span class="str">"person in a red hoodie walking near the gate"</span>)<br>
+            <span class="cmt"># -> [{"timestamp": "02:14.30", "score": 0.948, "source": "visual"}]</span><br><br>
+            <span class="cmt"># Run conversational Q&amp;A</span><br>
+            answer = index.ask(<span class="str">"What time does the red hoodie person enter?"</span>)<br>
+            <span class="cmt"># -> "The person in the red hoodie enters the gate at 02:14."</span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:22px;">
+          <div class="card" style="margin-bottom:0;"><div class="card-head"><h3>Python SDK</h3></div><span style="font-size:12.5px;color:var(--muted);line-height:1.5;">Async-ready module with streaming endpoints for FastAPI and Django bindings.</span></div>
+          <div class="card" style="margin-bottom:0;"><div class="card-head"><h3>CLI Tool</h3></div><span style="font-size:12.5px;color:var(--muted);line-height:1.5;">Run `adve index --file cctv.mp4` and parse output directly as clean JSON.</span></div>
+          <div class="card" style="margin-bottom:0;"><div class="card-head"><h3>Docker Compose</h3></div><span style="font-size:12.5px;color:var(--muted);line-height:1.5;">Pull `docker pull asmitha2025/adve` for GPU-ready CUDA runtime out-of-the-box.</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3><i class="ti ti-code" aria-hidden="true"></i>REST API Curl Samples</h3>
+          </div>
+          <div class="lib-block">
+            <span class="cmt"># 1. Index a video via API</span><br>
+            <span class="kw">curl</span> -X POST http://localhost:8000/v1/index/video \<br>
+            &nbsp;&nbsp;-H <span class="str">"Authorization: Bearer adve_live_xxx"</span> \<br>
+            &nbsp;&nbsp;-F <span class="str">"file=@lecture.mp4"</span><br><br>
+            <span class="cmt"># 2. Query moments</span><br>
+            <span class="kw">curl</span> -X POST http://localhost:8000/v1/search/text \<br>
+            &nbsp;&nbsp;-H <span class="str">"Authorization: Bearer adve_live_xxx"</span> \<br>
+            &nbsp;&nbsp;-H <span class="str">"Content-Type: application/json"</span> \<br>
+            &nbsp;&nbsp;-d <span class="str">'{"query": "whiteboard formula", "k": 5}'</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= VIEW: API KEYS ================= -->
+      <div class="page-view" id="view-api">
+        <div class="card">
+          <div class="card-head">
+            <h3><i class="ti ti-lock" aria-hidden="true"></i>Manage API Access Keys</h3>
+          </div>
+          <p class="card-sub">Generate keys to integrate ADVE video indexing directly into your custom applications.</p>
+          
+          <div style="display:flex;flex-direction:column;gap:12px;" id="api-keys-list">
+            <div class="video-row" style="padding:12px 0;">
+              <div class="video-info">
+                <div class="video-name" style="font-family:monospace;">adve_live_f89b91ac0d45367b9aaef08c2aef1e99</div>
+                <div class="video-meta">Active · Created Jun 2025</div>
+              </div>
+              <button class="btn-ghost"><i class="ti ti-copy" aria-hidden="true"></i> Copy</button>
+              <button class="btn-icon" style="color:#ef4444;"><i class="ti ti-trash" aria-hidden="true"></i></button>
+            </div>
+          </div>
+          
+          <button class="btn-primary" style="margin-top:16px;"><i class="ti ti-plus" aria-hidden="true"></i> Create New Live Key</button>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3><i class="ti ti-activity" aria-hidden="true"></i>Usage and Rate Limits</h3>
+          </div>
+          <div class="bar-wrap">
+            <div class="bar-label"><span>Minutes Deployed</span><span>234 / 3,000 min</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:7.8%;"></div></div>
+          </div>
+          <div class="bar-wrap">
+            <div class="bar-label"><span>Search Requests</span><span>4,821 / unlimited</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:48%;background:var(--green-text);"></div></div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:12px;">Growth Plan subscription · Renews July 30, 2026</div>
+        </div>
+      </div>
+
+      <!-- ================= VIEW: BILLING ================= -->
+      <div class="page-view" id="view-billing">
+        <div class="card">
+          <div class="card-head">
+            <h3><i class="ti ti-credit-card" aria-hidden="true"></i>Subscription Tier Pricing</h3>
+          </div>
+          <p class="card-sub">Choose the ideal indexing scale for your CCTV network or video platforms.</p>
+          
+          <div class="tier-row">
+            <div class="tier-card">
+              <div class="tier-name">Developer Free</div>
+              <div class="tier-price">₹0<span>/month</span></div>
+              <div class="tier-feat">
+                5 videos · 30 minutes indexed<br>
+                50 searches / day limit<br>
+                Community dashboard access
+              </div>
+            </div>
+            
+            <div class="tier-card featured">
+              <span style="font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-light);padding:2px 8px;border-radius:10px;display:inline-block;margin-bottom:6px;">Popular Plan</span>
+              <div class="tier-name">Growth Scale</div>
+              <div class="tier-price">₹10,000<span>/month</span></div>
+              <div class="tier-feat">
+                500 videos · 3,000 min indexed<br>
+                Unlimited search queries<br>
+                Full REST API keys &amp; prioritised indexing
+              </div>
+            </div>
+
+            <div class="tier-card">
+              <div class="tier-name">Enterprise Edge</div>
+              <div class="tier-price">₹40,000<span>/month</span></div>
+              <div class="tier-feat">
+                Unlimited indexing scope<br>
+                Private on-prem Docker runtime<br>
+                SLA support &amp; custom YOLO models
+              </div>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:12px;">Pay with Razorpay · UPI · Credit Cards · Net Banking. Cancel subscription at any time.</div>
+        </div>
+      </div>
+
+      <!-- ================= VIEW: SETTINGS ================= -->
+      <div class="page-view" id="view-settings">
+        <div class="card">
+          <div class="card-head">
+            <h3><i class="ti ti-settings" aria-hidden="true"></i>Settings</h3>
+          </div>
+          <p class="card-sub">Manage global configuration overrides for your local ADVE engine portal.</p>
+          
+          <div style="display:flex;flex-direction:column;gap:16px;max-width:500px;">
+            <div>
+              <label class="field-label">Active Database Directory</label>
+              <div class="input-with-icon">
+                <i class="ti ti-folder" aria-hidden="true"></i>
+                <input type="text" value="adve_v2/data/main_index" disabled style="color:var(--muted);">
+              </div>
+            </div>
+            <div>
+              <label class="field-label">Preferred Device Acceleration</label>
+              <div class="input-with-icon">
+                <i class="ti ti-cpu" aria-hidden="true"></i>
+                <input type="text" value="CUDA GPU (NVIDIA RTX 4050)" disabled style="color:var(--muted);">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
+
+    <!-- ================= FOOTER ================= -->
+    <footer class="bottom">
+      <div class="side">
+        <a href="#"><i class="ti ti-heart" aria-hidden="true"></i>Built by Asmitha</a>
+        <a href="https://github.com/asmitha2025/ADVE" target="_blank"><i class="ti ti-brand-github" aria-hidden="true"></i>GitHub</a>
+      </div>
+      <div class="side">
+        <a href="#"><i class="ti ti-code" aria-hidden="true"></i>Use via API</a>
+        <a href="#"><i class="ti ti-bolt" aria-hidden="true"></i>Built with FastAPI</a>
+      </div>
+    </footer>
 
   </div>
 
-  <!-- ===== COLUMN 3 ===== -->
-  <div class="col">
-
-    <!-- Card 5: Stats -->
-    <div class="card">
-      <div class="card-head">
-        <div class="step-num">5</div>
-        <h3>Deployed Index Statistics</h3>
-      </div>
-
-      <div class="stat-row">
-        <span class="left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>Total Embeddings</span>
-        <span class="val" id="stats-total">0</span>
-      </div>
-      <div class="stat-row">
-        <span class="left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M12 6v6l4 2"/></svg>Anchor (CLIP)</span>
-        <span class="val" id="stats-anchors">0</span>
-      </div>
-      <div class="stat-row">
-        <span class="left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>Delta (approx.)</span>
-        <span class="val" id="stats-deltas">0</span>
-      </div>
-      <div class="stat-row">
-        <span class="left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Savings (Adaptive)</span>
-        <span class="val" id="stats-savings">0.0%</span>
-      </div>
-      <div class="stat-row">
-        <span class="left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>Transcripts (Segments)</span>
-        <span class="val" id="stats-transcripts">0</span>
-      </div>
-      <div class="stat-row">
-        <span class="left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>OCR Text Chunks</span>
-        <span class="val" id="stats-ocr">0</span>
-      </div>
-      <div class="stat-row">
-        <span class="left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>Videos Indexed</span>
-        <span class="val" id="videosIndexed">0</span>
-      </div>
-
-      <div class="validation-box">
-        <p class="title">Validation Reference</p>
-        <div class="validation-row"><span>Synthetic:</span><b>96.7% savings · 0.948 cosine sim</b></div>
-        <div class="validation-row"><span>MOT17:</span><b>60.3% savings · 0.992 cosine sim</b></div>
-        <div class="validation-row"><span>GPU VRAM:</span><b>330 MB (vs 950 MB baseline)</b></div>
-      </div>
-
-      <div class="quick-guide">
-        <div class="title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 00-4 12.7c.6.5 1 1.2 1 2.3h6c0-1.1.4-1.8 1-2.3A7 7 0 0012 2z"/></svg>Quick Guide</div>
-        <div class="qg-item"><span class="qg-num">1</span>Upload or paste a YouTube URL and index the video.</div>
-        <div class="qg-item"><span class="qg-num">2</span>Search by text or ask a question in the chatbot.</div>
-      </div>
-    </div>
-
-  </div>
 </div>
 
-<!-- ================= FOOTER ================= -->
-<footer class="bottom">
-  <div class="side">
-    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 000-7.8z"/></svg>Built by Asmitha</a>
-    <a href="https://github.com/asmitha2025/ADVE" target="_blank"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.8.1-.8.1-.8 1.2.1 1.9 1.3 1.9 1.3 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6a4.6 4.6 0 011.2-3.2 4.3 4.3 0 010-3.2s1-.3 3.3 1.2a11.5 11.5 0 016 0c2.3-1.5 3.3-1.2 3.3-1.2a4.3 4.3 0 010 3.2 4.6 4.6 0 011.2 3.2c0 4.7-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0012 .5z"/></svg>GitHub</a>
-  </div>
-  <div class="side">
-    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l6-6-6-6"/><path d="M8 6l-6 6 6 6"/></svg>Use via API</a>
-    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h7l-1 8 11-14h-7l1-6z"/></svg>Built with Gradio</a>
-    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>Settings</a>
-  </div>
-</footer>
-
 <script>
-(function(){
+(function() {
   const API_BASE = window.location.origin;
-  let lastActiveTasks = {};
-  let chatHistory = [];
 
-  // ---- theme toggle ----
-  var themeBtn = document.getElementById('themeToggle');
-  themeBtn.addEventListener('click', function(){
-    var html = document.documentElement;
-    var isDark = html.getAttribute('data-theme') === 'dark';
-    html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  // ---- Page Navigation ----
+  const pages = {
+    dashboard: 'Dashboard',
+    index: 'Index Videos',
+    search: 'Search Moments',
+    chat: 'Video Chatbot',
+    analytics: 'Analytics',
+    library: 'Pip Library',
+    api: 'API Keys',
+    billing: 'Billing',
+    settings: 'Settings'
+  };
+
+  document.querySelectorAll('.nav-btn[data-page]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
+      
+      btn.classList.add('active');
+      const pageId = btn.dataset.page;
+      document.getElementById('view-' + pageId).classList.add('active');
+      document.getElementById('topbar-page-title').textContent = pages[pageId] || pageId;
+    });
   });
 
-  // ---- tabs ----
-  var tabs = document.querySelectorAll('.tab');
-  tabs.forEach(function(tab){
-    tab.addEventListener('click', function(){
-      tabs.forEach(function(t){ t.classList.remove('active'); });
+  // ---- Dark Theme Toggle ----
+  const themeBtn = document.getElementById('themeToggle');
+  const sunIcon = themeBtn.querySelector('.sun');
+  const moonIcon = themeBtn.querySelector('.moon');
+
+  themeBtn.addEventListener('click', () => {
+    const html = document.documentElement;
+    const isDark = html.getAttribute('data-theme') === 'dark';
+    if (isDark) {
+      html.setAttribute('data-theme', 'light');
+      sunIcon.style.display = 'none';
+      moonIcon.style.display = 'inline-block';
+    } else {
+      html.setAttribute('data-theme', 'dark');
+      sunIcon.style.display = 'inline-block';
+      moonIcon.style.display = 'none';
+    }
+  });
+
+  // ---- Ingestion: Tab Switching ----
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
-      var targetTab = tab.getAttribute('data-tab');
-      var targetId = 'panel-yt';
-      if (targetTab === 'local') targetId = 'panel-local';
-      else if (targetTab === 'stream') targetId = 'panel-stream';
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      
+      const targetId = tab.getAttribute('data-tab') === 'yt' ? 'panel-yt' : 'panel-local';
       document.getElementById(targetId).classList.add('active');
     });
   });
 
-  // ---- checkbox toggles ----
-  document.querySelectorAll('.check-box').forEach(function(box){
-    box.addEventListener('click', function(){
+  // ---- Ingestion: Checkbox toggles ----
+  document.querySelectorAll('.check-box').forEach(box => {
+    box.addEventListener('click', () => {
       box.classList.toggle('checked');
     });
   });
 
-  // ---- advanced search toggle ----
-  const toggleBtn = document.getElementById('toggleAdvancedSearch');
-  const advancedPanel = document.getElementById('advancedSearchPanel');
-  if (toggleBtn && advancedPanel) {
-    toggleBtn.addEventListener('click', function() {
-      const isHidden = advancedPanel.style.display === 'none';
-      advancedPanel.style.display = isHidden ? 'flex' : 'none';
-    });
-  }
+  // ---- Slider Label bindings ----
+  const fpsSlider = document.getElementById('param-fps');
+  const fpsLbl = document.getElementById('fps-lbl');
+  fpsSlider.addEventListener('input', () => { fpsLbl.textContent = `${parseFloat(fpsSlider.value).toFixed(1)} FPS`; });
 
-  // ---- local file drag and drop upload ----
-  const dropzone = document.querySelector('.dropzone');
-  const fileInput = document.getElementById('video-file-input');
-  if (dropzone && fileInput) {
-    dropzone.addEventListener('click', () => fileInput.click());
-    dropzone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      dropzone.style.borderColor = 'var(--blue)';
-    });
-    dropzone.addEventListener('dragleave', () => {
-      dropzone.style.borderColor = 'var(--border)';
-    });
-    dropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      dropzone.style.borderColor = 'var(--border)';
-      if (e.dataTransfer.files.length > 0) {
-        uploadVideo(e.dataTransfer.files[0]);
-      }
-    });
-    fileInput.addEventListener('change', () => {
-      if (fileInput.files.length > 0) {
-        uploadVideo(fileInput.files[0]);
-      }
-    });
-  }
+  const thrSlider = document.getElementById('param-threshold');
+  const thrLbl = document.getElementById('threshold-lbl');
+  thrSlider.addEventListener('input', () => { thrLbl.textContent = parseFloat(thrSlider.value).toFixed(2); });
 
-  const statusPill = document.getElementById('statusPill');
-  const statusText = document.getElementById('statusText');
-  const progressTrack = document.getElementById('progressTrack');
-  const progressFill = document.getElementById('progressFill');
+  const mdfSlider = document.getElementById('param-mdf');
+  const mdfLbl = document.getElementById('mdf-lbl');
+  mdfSlider.addEventListener('input', () => { mdfLbl.textContent = mdfSlider.value; });
 
-  function uploadVideo(file) {
-    if (!file) return;
-    const indexBtn = document.getElementById('indexBtn');
-    if (indexBtn) indexBtn.disabled = true;
-    
-    if (statusPill) {
-      statusPill.classList.remove('done');
-      const spinner = statusPill.querySelector('.spinner');
-      if (spinner) spinner.style.display = 'inline-block';
-      statusText.textContent = "Uploading video...";
+  // ---- Local Ingestion: Drag & Drop click ----
+  const dropzone = document.getElementById('local-dropzone');
+  const fileInput = document.getElementById('local-file-input');
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length > 0) {
+      dropzone.querySelector('p').textContent = `Selected: ${fileInput.files[0].name}`;
     }
-    if (progressTrack) progressTrack.classList.add('show');
-    if (progressFill) progressFill.style.width = '0%';
+  });
+
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.style.borderColor = 'var(--blue)';
+  });
+  dropzone.addEventListener('dragleave', () => {
+    dropzone.style.borderColor = 'var(--border)';
+  });
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.style.borderColor = 'var(--border)';
+    if (e.dataTransfer.files.length > 0) {
+      fileInput.files = e.dataTransfer.files;
+      dropzone.querySelector('p').textContent = `Selected: ${fileInput.files[0].name}`;
+    }
+  });
+
+  // ---- API Integration ----
+  let lastActiveTasks = {};
+  let currentActiveVideo = "";
+
+  async function fetchStats() {
+    try {
+      const res = await fetch(`${API_BASE}/v1/stats`);
+      const data = await res.json();
+
+      const total = data.index.total_embeddings || 0;
+      const anchors = data.index.anchor_frames || 0;
+      const deltas = data.index.delta_frames || 0;
+      const sizeMb = data.index.index_size_mb || 0;
+      const savings = total > 0 ? ((deltas / total) * 100).toFixed(1) : "0.0";
+      const videos = data.index.indexed_videos || [];
+
+      // Update Dashboard Stats
+      document.getElementById('stats-total').innerText = total.toLocaleString();
+      document.getElementById('stats-deltas-sub').innerText = `${deltas.toLocaleString()} delta frames`;
+      document.getElementById('stats-savings').innerText = `${savings}%`;
+      document.getElementById('stats-size').innerText = `${sizeMb.toFixed(2)} MB`;
+      document.getElementById('stats-videos-count').innerText = videos.length.toString();
+      document.getElementById('stats-videos-sub').innerText = `${anchors.toLocaleString()} anchors (CLIP)`;
+
+      document.getElementById('topbar-savings-badge').innerText = `${savings}% encoder savings`;
+
+      // Update search video filters
+      updateCameraFilters(videos);
+
+      // Render Indexed Video Database & Recent videos list
+      renderVideoDatabase(videos);
+
+      // Render Active Tasks progress bars
+      const activeTasks = data.active_tasks || {};
+      const tasksCard = document.getElementById('tasks-card');
+      const tasksContainer = document.getElementById('tasks-container');
+      const taskKeys = Object.keys(activeTasks);
+
+      if (taskKeys.length > 0) {
+        tasksCard.style.display = 'block';
+        tasksContainer.innerHTML = '';
+        taskKeys.forEach(tid => {
+          const task = activeTasks[tid];
+          tasksContainer.innerHTML += `
+            <div style="background: var(--bg-soft); padding: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+              <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 6px;">
+                <span style="color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;">📦 ${task.name}</span>
+                <span style="color: var(--blue); font-weight: 800;">${task.progress}%</span>
+              </div>
+              <div style="font-size: 11px; color: var(--muted); margin-bottom: 8px;">${task.status}</div>
+              <div class="bar-track" style="height: 6px; margin-top: 4px;">
+                <div class="bar-fill" style="width: ${task.progress}%; transition: width 0.3s ease;"></div>
+              </div>
+            </div>
+          `;
+        });
+      } else {
+        tasksCard.style.display = 'none';
+      }
+
+      lastActiveTasks = activeTasks;
+
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+    }
+  }
+
+  function updateCameraFilters(videos) {
+    const filterSelect = document.getElementById('search-camera-filter');
+    const currentValue = filterSelect.value;
+    filterSelect.innerHTML = '<option value="">Search across all indexed videos</option>';
+    videos.forEach(v => {
+      const name = v.video_path.split('\\').pop().split('/').pop();
+      filterSelect.innerHTML += `<option value="${v.video_path}">${name}</option>`;
+    });
+    filterSelect.value = currentValue;
+  }
+
+  function renderVideoDatabase(videos) {
+    const listContainer = document.getElementById('database-videos-list');
+    const recentContainer = document.getElementById('recent-videos-list');
+    
+    if (videos.length === 0) {
+      listContainer.innerHTML = '<div style="font-size:13px;color:var(--muted);text-align:center;padding:12px 0;">No records found.</div>';
+      recentContainer.innerHTML = '<div style="font-size:13px;color:var(--muted);text-align:center;padding:20px 0;">No videos indexed yet. Go to the Ingestion tab to add one.</div>';
+      return;
+    }
+
+    let dbHtml = "";
+    let recentHtml = "";
+
+    videos.forEach(v => {
+      const filename = v.video_path.split('\\').pop().split('/').pop();
+      dbHtml += `
+        <div class="video-row">
+          <div class="video-thumb"><i class="ti ti-video" aria-hidden="true"></i></div>
+          <div class="video-info">
+            <div class="video-name" title="${v.video_path}">${filename}</div>
+            <div class="video-meta">Camera: ${v.camera_id || 'Upload'}</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <span class="pill indexed">Visual</span>
+          </div>
+        </div>
+      `;
+      recentHtml += `
+        <div class="video-row">
+          <div class="video-thumb"><i class="ti ti-player-play" aria-hidden="true"></i></div>
+          <div class="video-info">
+            <div class="video-name" title="${v.video_path}">${filename}</div>
+            <div class="video-meta">Active anchors: ${v.camera_id || 'cctv'}</div>
+          </div>
+          <span class="pill indexed">Indexed</span>
+        </div>
+      `;
+    });
+
+    listContainer.innerHTML = dbHtml;
+    recentContainer.innerHTML = recentHtml;
+
+    // Set first video as active if none set
+    if (!currentActiveVideo && videos.length > 0) {
+      currentActiveVideo = videos[0].video_path;
+      renderChapters(currentActiveVideo);
+    }
+  }
+
+  // Render chapters dummy matching local keyframe boundaries
+  function renderChapters(videoPath) {
+    const chaptersContainer = document.getElementById('chapters-list');
+    const filename = videoPath.split('\\').pop().split('/').pop();
+    chaptersContainer.innerHTML = `
+      <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:12px;">Active: ${filename}</div>
+      <div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-ts">00:00</div><div class="timeline-text" style="font-weight:600">Video introduction</div></div>
+      <div class="timeline-item"><div class="timeline-dot green"></div><div class="timeline-ts">00:15</div><div class="timeline-text" style="font-weight:600">Motion transition boundary</div></div>
+      <div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-ts">00:45</div><div class="timeline-text" style="font-weight:600">Primary spatial scene shifts</div></div>
+    `;
+  }
+
+  // Index Video Trigger
+  const indexBtn = document.getElementById('indexBtn');
+  indexBtn.addEventListener('click', () => {
+    const isYt = document.querySelector('.tab[data-tab="yt"]').classList.contains('active');
+    
+    if (isYt) {
+      indexYouTubeVideo();
+    } else {
+      uploadLocalVideo();
+    }
+  });
+
+  async function indexYouTubeVideo() {
+    const urlInput = document.getElementById('youtube-url-input');
+    const statusText = document.getElementById('statusText');
+    const statusPill = document.getElementById('statusPill');
+    const url = urlInput.value.trim();
+
+    if (!url) {
+      alert("Please enter a YouTube video URL.");
+      return;
+    }
+
+    indexBtn.disabled = true;
+    statusPill.classList.remove('done');
+    document.getElementById('statusSpinner').style.display = 'inline-block';
+    statusText.textContent = 'Submitting YouTube URL...';
+
+    try {
+      const res = await fetch(`${API_BASE}/v1/index/youtube`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url })
+      });
+
+      if (res.ok) {
+        statusText.textContent = 'Indexing task started in the background!';
+        urlInput.value = '';
+        setTimeout(fetchStats, 2000);
+      } else {
+        const err = await res.json();
+        statusText.textContent = `Error: ${err.detail || 'Failed to submit'}`;
+      }
+    } catch (e) {
+      statusText.textContent = `Network error: ${e.message}`;
+    } finally {
+      indexBtn.disabled = false;
+      document.getElementById('statusSpinner').style.display = 'none';
+    }
+  }
+
+  function uploadLocalVideo() {
+    const file = fileInput.files[0];
+    const statusText = document.getElementById('statusText');
+    const statusPill = document.getElementById('statusPill');
+    const progressTrack = document.getElementById('progressTrack');
+    const progressFill = document.getElementById('progressFill');
+
+    if (!file) {
+      alert("Please choose a local video file to upload.");
+      return;
+    }
+
+    indexBtn.disabled = true;
+    statusPill.classList.remove('done');
+    document.getElementById('statusSpinner').style.display = 'inline-block';
+    statusText.textContent = 'Uploading file...';
+    progressTrack.classList.add('show');
+    progressFill.style.width = '0%';
 
     const formData = new FormData();
     formData.append("file", file);
@@ -836,236 +1457,59 @@
     xhr.upload.onprogress = function(e) {
       if (e.lengthComputable) {
         const pct = (e.loaded / e.total) * 100;
-        if (progressFill) progressFill.style.width = `${pct * 0.9}%`;
+        progressFill.style.width = `${pct}%`;
       }
     };
 
     xhr.onload = function() {
-      if (indexBtn) indexBtn.disabled = false;
+      indexBtn.disabled = false;
+      document.getElementById('statusSpinner').style.display = 'none';
+      progressTrack.classList.remove('show');
+      
       if (xhr.status === 200) {
-        showToastNotification("🚀 Video upload completed! Indexing is running in background.");
-        fetchStats();
+        statusPill.classList.add('done');
+        statusText.textContent = 'Upload completed! Processing video in background.';
+        fileInput.value = '';
+        dropzone.querySelector('p').textContent = 'Drag & drop a video, or click to browse';
+        setTimeout(fetchStats, 2000);
       } else {
-        showToastNotification("❌ Upload failed. Please try again.");
+        statusText.textContent = 'Failed to index video file.';
       }
     };
+
     xhr.onerror = function() {
-      if (indexBtn) indexBtn.disabled = false;
-      showToastNotification("❌ Network error during upload.");
+      indexBtn.disabled = false;
+      document.getElementById('statusSpinner').style.display = 'none';
+      statusText.textContent = 'Network error during upload.';
     };
+
     xhr.send(formData);
   }
 
-  // ---- index video flow ----
-  var indexBtn = document.getElementById('indexBtn');
-  if (indexBtn) {
-    indexBtn.addEventListener('click', async () => {
-      var activeTab = document.querySelector('.tab.active').getAttribute('data-tab');
-      if (activeTab === 'yt') {
-        await indexYouTube();
-      } else if (activeTab === 'local') {
-        if (fileInput && fileInput.files.length > 0) {
-          uploadVideo(fileInput.files[0]);
-        } else {
-          showToastNotification("Please select or drop a local video file first.");
-        }
-      } else if (activeTab === 'stream') {
-        await connectStream();
-      }
-    });
-  }
+  // ---- Search Integration ----
+  const searchBtn = document.getElementById('searchBtn');
+  const resultsContainer = document.getElementById('results-container');
+  const resultsTitle = document.getElementById('results-count-title');
+  const playerCard = document.getElementById('playback-card');
+  const momentPlayer = document.getElementById('moment-player');
+  const playbackTitle = document.getElementById('playback-title');
 
-  document.getElementById('heroIndexBtn').addEventListener('click', function(){
-    document.querySelector('.tabs').scrollIntoView({behavior:'smooth', block:'center'});
-  });
+  searchBtn.addEventListener('click', performSearch);
+  document.getElementById('search-query').addEventListener('keydown', (e) => { if (e.key === 'Enter') performSearch(); });
 
-  async function indexYouTube() {
-    var ytInput = document.getElementById('youtube-url-input');
-    if (!ytInput) return;
-    var url = ytInput.value.trim();
-    if (!url) {
-      showToastNotification("Please enter a YouTube video URL.");
-      return;
-    }
-
-    if (statusPill) {
-      statusPill.classList.remove('done');
-      const spinner = statusPill.querySelector('.spinner');
-      if (spinner) spinner.style.display = 'inline-block';
-      statusText.textContent = "Queuing YouTube video...";
-    }
-    if (progressTrack) progressTrack.classList.add('show');
-    if (progressFill) progressFill.style.width = '0%';
-
-    try {
-      const res = await fetch(`${API_BASE}/v1/index/youtube`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url })
-      });
-      if (res.ok) {
-        showToastNotification("🚀 YouTube url submitted successfully!");
-        ytInput.value = '';
-        fetchStats();
-      } else {
-        const err = await res.json();
-        showToastNotification(`❌ Failed: ${err.detail || 'check logs'}`);
-      }
-    } catch (err) {
-      showToastNotification(`❌ Network error: ${err.message}`);
-    }
-  }
-
-  async function connectStream() {
-    const camIdInput = document.getElementById('camera-id-input');
-    const rtspUrlInput = document.getElementById('rtsp-url-input');
-    if (!camIdInput || !rtspUrlInput) return;
-    
-    const camId = camIdInput.value.trim();
-    const rtspUrl = rtspUrlInput.value.trim();
-    if (!camId || !rtspUrl) {
-      showToastNotification("Please fill in both Camera ID and RTSP URL.");
-      return;
-    }
-
-    try {
-      const res = await fetch(`${API_BASE}/v1/index/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camera_id: camId, rtsp_url: rtspUrl })
-      });
-      if (res.ok) {
-        showToastNotification(`✅ Connected stream: ${camId}`);
-        camIdInput.value = '';
-        rtspUrlInput.value = '';
-        fetchStats();
-      } else {
-        const err = await res.json();
-        showToastNotification(`❌ Connection failed: ${err.detail}`);
-      }
-    } catch (err) {
-      showToastNotification(`❌ Network error: ${err.message}`);
-    }
-  }
-
-  // ---- stats refresh ----
-  const statsTotal = document.getElementById('stats-total');
-  const statsAnchors = document.getElementById('stats-anchors');
-  const statsDeltas = document.getElementById('stats-deltas');
-  const statsSavings = document.getElementById('stats-savings');
-  const statsTranscripts = document.getElementById('stats-transcripts');
-  const statsOcr = document.getElementById('stats-ocr');
-  const videosIndexedEl = document.getElementById('videosIndexed');
-
-  async function fetchStats() {
-    try {
-      const res = await fetch(`${API_BASE}/v1/stats`);
-      const data = await res.json();
-      
-      const total = data.index.total_embeddings;
-      const anchors = data.index.anchor_frames;
-      const deltas = data.index.delta_frames;
-      const savings = total > 0 ? ((deltas / total) * 100).toFixed(1) : "0.0";
-      
-      if (statsTotal) statsTotal.innerText = total.toLocaleString();
-      if (statsAnchors) statsAnchors.innerText = anchors.toLocaleString();
-      if (statsDeltas) statsDeltas.innerText = deltas.toLocaleString();
-      if (statsSavings) statsSavings.innerText = `${savings}%`;
-      if (statsTranscripts) statsTranscripts.innerText = (data.transcript_count || 0).toLocaleString();
-      if (statsOcr) statsOcr.innerText = (data.ocr_count || 0).toLocaleString();
-      if (videosIndexedEl) videosIndexedEl.innerText = (data.index.indexed_videos || []).length;
-
-      // Update camera filter dropdown
-      updateCameraFilterDropdown(data.index.indexed_videos || []);
-
-      // Update active tasks progress
-      const activeTasks = data.active_tasks || {};
-      const taskKeys = Object.keys(activeTasks);
-      if (taskKeys.length > 0) {
-        const tid = taskKeys[0];
-        const task = activeTasks[tid];
-        
-        if (statusPill) {
-          statusPill.classList.remove('done');
-          const spinner = statusPill.querySelector('.spinner');
-          if (spinner) spinner.style.display = 'inline-block';
-          statusText.textContent = `${task.status} (${task.progress}%)`;
-        }
-        if (progressTrack) progressTrack.classList.add('show');
-        if (progressFill) progressFill.style.width = `${task.progress}%`;
-        
-        if (task.status === "Ready to search!" && (!lastActiveTasks[tid] || lastActiveTasks[tid].status !== "Ready to search!")) {
-          showToastNotification(`🎉 Video "${task.name}" indexing completed!`);
-        }
-      } else {
-        if (statusPill && statusPill.classList.contains('done') === false && Object.keys(lastActiveTasks).length > 0) {
-          statusPill.classList.add('done');
-          const spinner = statusPill.querySelector('.spinner');
-          if (spinner) spinner.style.display = 'none';
-          statusText.textContent = 'Ready ✓';
-          if (progressTrack) progressTrack.classList.remove('show');
-        }
-      }
-      
-      lastActiveTasks = activeTasks;
-    } catch (err) {
-      console.error("Error fetching stats:", err);
-    }
-  }
-
-  function updateCameraFilterDropdown(videos) {
-    const select = document.getElementById('search-camera-filter');
-    if (!select) return;
-    
-    const curVal = select.value;
-    select.innerHTML = '<option value="">-- All Videos & Streams --</option>';
-    
-    const uniquePaths = [...new Set(videos.map(v => v.video_path))];
-    uniquePaths.forEach(path => {
-      const opt = document.createElement('option');
-      opt.value = path;
-      opt.innerText = path.split('/').pop().split('\\').pop();
-      select.appendChild(opt);
-    });
-    
-    if (uniquePaths.includes(curVal)) {
-      select.value = curVal;
-    }
-  }
-
-  function showToastNotification(msg) {
-    let container = document.getElementById('toast-container');
-    if (!container) {
-      container = document.createElement('div');
-      container.id = 'toast-container';
-      container.style = 'position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px;';
-      document.body.appendChild(container);
-    }
-    const toast = document.createElement('div');
-    toast.style = 'background:#1a1b2f; border:1px solid var(--blue); color:white; padding:12px 20px; border-radius:8px; font-size:13px; font-weight:500; min-width:250px; box-shadow:var(--shadow-lift); display:flex; align-items:center; justify-content:space-between; transition:all 0.3s ease;';
-    toast.innerHTML = `<span>${msg}</span><span onclick="this.parentElement.remove()" style="margin-left:15px; cursor:pointer; opacity:0.8;">✕</span>`;
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 5000);
-  }
-
-  // ---- semantic search ----
-  const searchBtn = document.getElementById('sceneSearchBtn');
-  const sceneInput = document.getElementById('sceneSearchInput');
-  const matchesGrid = document.getElementById('matchesGrid');
-  const matchesSub = document.getElementById('matchesSub');
-
-  async function runSearch() {
-    const query = sceneInput.value.trim();
+  async function performSearch() {
+    const query = document.getElementById('search-query').value.trim();
     if (!query) return;
 
-    const k = parseInt(document.getElementById('search-k').value) || 6;
-    const cameraId = document.getElementById('search-camera-filter').value;
+    const k = parseInt(document.getElementById('search-k').value) || 9;
+    const camera = document.getElementById('search-camera-filter').value;
+    const minSim = parseFloat(document.getElementById('search-min-similarity').value) || 0.0;
     const anchorOnly = document.getElementById('search-anchor-only').checked;
     const temporalDedup = document.getElementById('search-temporal-dedup').checked;
-    const minSimilarity = parseFloat(document.getElementById('search-min-similarity').value) || 0.0;
 
-    matchesSub.textContent = `Searching for: "${query}"...`;
-    matchesGrid.innerHTML = '<div style="grid-column: span 3; text-align: center; color: var(--muted); padding: 20px;">🔍 Searching vector index...</div>';
+    searchBtn.disabled = true;
+    resultsTitle.innerText = "Searching moments...";
+    resultsContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px 0;"><span class="spinner" style="display:inline-block;width:24px;height:24px;"></span></div>';
 
     try {
       const res = await fetch(`${API_BASE}/v1/search/text`, {
@@ -1074,123 +1518,135 @@
         body: JSON.stringify({
           query: query,
           k: k,
-          camera_id: cameraId || null,
+          camera_id: camera || null,
           anchor_only: anchorOnly,
           temporal_dedup: temporalDedup,
-          min_similarity: minSimilarity
+          min_similarity: minSim
         })
       });
-      const results = await res.json();
-      displayResults(results, query);
-    } catch (err) {
-      console.error(err);
-      matchesSub.textContent = "Error executing search.";
-      matchesGrid.innerHTML = '<div style="grid-column: span 3; text-align: center; color: #ef4444; padding: 20px;">❌ Connection error</div>';
+
+      const data = await res.json();
+      renderSearchResults(data);
+    } catch (e) {
+      resultsTitle.innerText = "Query Results";
+      resultsContainer.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px 0;color:#ef4444;">Search failed: ${e.message}</div>`;
+    } finally {
+      searchBtn.disabled = false;
     }
   }
 
-  function displayResults(results, query) {
-    matchesSub.textContent = query
-      ? `Top matching keyframes for "${query}".`
-      : 'Top matching keyframes from your indexed videos.';
-    
-    matchesGrid.innerHTML = '';
-    
+  function renderSearchResults(results) {
+    resultsTitle.innerText = `Query Results (${results.length} found)`;
     if (results.length === 0) {
-      matchesGrid.innerHTML = '<div style="grid-column: span 3; text-align: center; color: var(--muted); padding: 20px;">📂 No matches found.</div>';
+      resultsContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px 0;color:var(--muted);">No matching moments found.</div>';
       return;
     }
 
+    let html = "";
     results.forEach((r, idx) => {
       const pct = (r.similarity * 100).toFixed(0);
-      const timeStr = formatTimestamp(r.timestamp);
-      
-      const isSpeech = r.camera_id && r.camera_id.includes('Speech:');
-      const speechText = r.text || (isSpeech ? r.camera_id.split('Speech:')[1].replace(/[")]/g, '') : '');
+      const timeStr = formatTime(r.timestamp);
+      const filename = r.video_path.split('\\').pop().split('/').pop();
       const isAnchor = r.is_anchor;
-      const source = r.source || (isSpeech ? 'audio' : 'visual');
-
-      let kndText = "🔵 Anchor";
-      if (source === 'audio') kndText = "🎤 Audio";
-      else if (source === 'both') kndText = "⚡ Multi";
-      else if (!isAnchor) kndText = "🟠 Delta";
+      const source = r.source || "visual";
+      
+      let badgeHtml = `<span class="badge score">Score ${r.similarity.toFixed(3)}</span>`;
+      if (isAnchor) badgeHtml += ` <span class="pill indexed">Anchor</span>`;
 
       const frameUrl = `${API_BASE}/v1/frame?video_id=${encodeURIComponent(r.video_path)}&frame_idx=${r.frame_idx}`;
 
-      const card = document.createElement('div');
-      card.className = 'match';
-      card.style.animation = `rise 0.45s ease ${idx * 0.08}s both`;
-      card.innerHTML = `
-        <div class="match-img">
-          <img src="${frameUrl}" alt="Match Frame" onerror="this.src='https://placehold.co/300x150/111528/9ca3bd?text=No+Frame'" style="width:100%;height:100%;object-fit:cover;">
-          <span class="match-badge">Match ${idx + 1}</span>
-          <span class="match-time">${timeStr}</span>
-        </div>
-        <div class="match-meta" style="flex-direction:column;gap:4px;padding:10px;display:flex;">
-          <div style="display:flex;gap:6px;align-items:center;">
-            <span class="badge score">${pct}% match</span>
-            <span class="badge frame">${kndText}</span>
+      html += `
+        <div class="match-card" data-video="${r.video_path}" data-timestamp="${r.timestamp}">
+          <div class="match-img">
+            <img src="${frameUrl}" alt="Match Frame" onerror="this.src='https://placehold.co/400x225/111528/9aa3bd?text=No+Frame+Loaded'">
+            <span class="match-badge">Match ${idx + 1}</span>
+            <span class="match-time">${timeStr}</span>
           </div>
-          ${speechText ? `<div style="font-size:11px;color:var(--violet);font-weight:500;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${speechText}">"${speechText}"</div>` : ''}
-          <div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;" title="${r.video_path}">Source: ${r.video_path}</div>
+          <div class="match-meta">
+            ${badgeHtml}
+            <span class="badge frame">Frame #${r.frame_idx}</span>
+          </div>
+          <div class="match-body">
+            <p title="${r.video_path}">Video: <b>${filename}</b></p>
+          </div>
         </div>
       `;
+    });
 
-      matchesGrid.appendChild(card);
+    resultsContainer.innerHTML = html;
+
+    // Attach click listeners to match cards for moments playback
+    document.querySelectorAll('.match-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const video = card.dataset.video;
+        const timestamp = parseFloat(card.dataset.timestamp);
+        
+        playerCard.style.display = 'block';
+        playbackTitle.textContent = `Playing moment at timestamp: ${formatTime(timestamp)}`;
+        
+        // Scrub player to moment
+        momentPlayer.src = `${API_BASE}/v1/frame?video_id=${encodeURIComponent(video)}&frame_idx=-1`; 
+        momentPlayer.load();
+        
+        playerCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
     });
   }
 
-  window.searchImage = async function(file) {
-    if (!file) return;
-    const k = parseInt(document.getElementById('search-k').value) || 6;
-    const cameraId = document.getElementById('search-camera-filter').value;
-    const anchorOnly = document.getElementById('search-anchor-only').checked;
-    const temporalDedup = document.getElementById('search-temporal-dedup').checked;
-    const minSimilarity = parseFloat(document.getElementById('search-min-similarity').value) || 0.0;
-
-    matchesSub.textContent = `Searching by reference image...`;
-    matchesGrid.innerHTML = '<div style="grid-column: span 3; text-align: center; color: var(--muted); padding: 20px;">🔍 Calculating image embeddings...</div>';
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    let url = `${API_BASE}/v1/search/image?k=${k}&anchor_only=${anchorOnly}&temporal_dedup=${temporalDedup}&min_similarity=${minSimilarity}`;
-    if (cameraId) {
-      url += `&camera_id=${encodeURIComponent(cameraId)}`;
-    }
-
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        body: formData
-      });
-      const results = await res.json();
-      displayResults(results, "Reference Image Query");
-    } catch (err) {
-      console.error(err);
-      matchesSub.textContent = "Error executing image search.";
-      matchesGrid.innerHTML = '<div style="grid-column: span 3; text-align: center; color: #ef4444; padding: 20px;">❌ Connection error</div>';
-    }
-  };
-
-  searchBtn.addEventListener('click', runSearch);
-  sceneInput.addEventListener('keydown', function(e){ if(e.key === 'Enter') runSearch(); });
-
-  function formatTimestamp(sec) {
+  function formatTime(sec) {
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   }
 
-  // ---- chatbot ----
+  // ---- Chatbot Flow ----
   const chatScroll = document.getElementById('chatScroll');
   const chatInput = document.getElementById('chatInput');
-  const sendBtn = document.getElementById('sendBtn');
+  const chatSendBtn = document.getElementById('chatSendBtn');
   const clearChatBtn = document.getElementById('clearChatBtn');
+  let dialogueHistory = [];
 
-  function addBubble(text, isUser) {
+  chatSendBtn.addEventListener('click', sendChatMessage);
+  chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChatMessage(); });
+
+  async function sendChatMessage() {
+    const question = chatInput.value.trim();
+    if (!question) return;
+
+    // Append user bubble
+    appendBubble(question, true);
+    chatInput.value = '';
+
+    // Append typing dots
+    const typingBubble = appendTypingIndicator();
+
+    try {
+      const res = await fetch(`${API_BASE}/v1/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: question,
+          camera_id: currentActiveVideo || null,
+          history: dialogueHistory
+        })
+      });
+
+      const data = await res.json();
+      typingBubble.remove();
+
+      appendBubble(data.response, false);
+      dialogueHistory.push({ role: "user", content: question });
+      dialogueHistory.push({ role: "assistant", content: data.response });
+
+    } catch (e) {
+      typingBubble.remove();
+      appendBubble(`Chat failed: ${e.message}`, false);
+    }
+  }
+
+  function appendBubble(text, isUser) {
     const row = document.createElement('div');
-    row.className = `chat-bubble-row${isUser ? ' user' : ''}`;
+    row.className = 'chat-bubble-row' + (isUser ? ' user' : '');
     
     const avatar = document.createElement('div');
     if (isUser) {
@@ -1198,69 +1654,45 @@
       avatar.textContent = 'You';
     } else {
       avatar.className = 'bot-avatar';
-      avatar.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1"/><path d="M8 13v1M16 13v1"/></svg>';
+      avatar.innerHTML = '<i class="ti ti-robot"></i>';
     }
-    
+
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     bubble.innerText = text;
-    
+
     row.appendChild(avatar);
     row.appendChild(bubble);
+    chatScroll.appendChild(row);
+    chatScroll.scrollTop = chatScroll.scrollHeight;
+  }
+
+  function appendTypingIndicator() {
+    const row = document.createElement('div');
+    row.className = 'chat-bubble-row';
+    row.innerHTML = `
+      <div class="bot-avatar"><i class="ti ti-robot"></i></div>
+      <div class="bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>
+    `;
     chatScroll.appendChild(row);
     chatScroll.scrollTop = chatScroll.scrollHeight;
     return row;
   }
 
-  async function sendMessage() {
-    const text = chatInput.value.trim();
-    if (!text) return;
-    
-    addBubble(text, true);
-    chatInput.value = '';
-    chatHistory.push({ role: "user", content: text });
-
-    const typingRow = document.createElement('div');
-    typingRow.className = 'chat-bubble-row';
-    typingRow.innerHTML = '<div class="bot-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1"/><path d="M8 13v1M16 13v1"/></svg></div><div class="bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
-    chatScroll.appendChild(typingRow);
-    chatScroll.scrollTop = chatScroll.scrollHeight;
-
-    const cameraId = document.getElementById('search-camera-filter').value;
-
-    try {
-      const res = await fetch(`${API_BASE}/v1/chat/rag`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: text,
-          video_id: cameraId || null,
-          history: chatHistory.slice(-6)
-        })
-      });
-      const data = await res.json();
-      typingRow.remove();
-      addBubble(data.answer, false);
-      chatHistory.push({ role: "assistant", content: data.answer });
-    } catch (err) {
-      console.error(err);
-      typingRow.remove();
-      addBubble("⚠️ Connection error to Video RAG backend.", false);
-    }
-  }
-
-  sendBtn.addEventListener('click', sendMessage);
-  chatInput.addEventListener('keydown', function(e){ if(e.key === 'Enter') sendMessage(); });
-
-  clearChatBtn.addEventListener('click', function(){
-    chatScroll.innerHTML = '';
-    chatHistory = [];
-    addBubble('Hello! Ask me anything about the indexed video. I can help you find moments, summarize content, and more.', false);
+  clearChatBtn.addEventListener('click', () => {
+    chatScroll.innerHTML = `
+      <div class="chat-bubble-row">
+        <div class="bot-avatar"><i class="ti ti-robot" aria-hidden="true"></i></div>
+        <div class="bubble">Hello! Select a video, and ask me anything about its scenes or spoken dialogue. I will find relevant timestamps and provide detailed answers!</div>
+      </div>
+    `;
+    dialogueHistory = [];
   });
 
-  // ---- init load ----
+  // ---- Initialize ----
   fetchStats();
   setInterval(fetchStats, 5000);
+
 })();
 </script>
 
