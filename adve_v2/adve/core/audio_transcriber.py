@@ -25,8 +25,10 @@ class AudioTranscriber:
         if self._model is None and self.whisper_available:
             try:
                 import whisper
-                print(f"[AudioTranscriber] Loading Whisper model '{self.model_name}'...")
-                self._model = whisper.load_model(self.model_name, device="cpu")
+                import torch
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                print(f"[AudioTranscriber] Loading Whisper model '{self.model_name}' on {device}...")
+                self._model = whisper.load_model(self.model_name, device=device)
                 print("[AudioTranscriber] Whisper model loaded successfully.")
             except Exception as e:
                 print(f"[AudioTranscriber] Failed to load Whisper model: {e}")

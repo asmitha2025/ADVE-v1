@@ -1,5 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
@@ -252,6 +252,8 @@ def index_video_task(
     from adve.core.frame_filter import FrameFilter
     motion_filter = FrameFilter(motion_threshold=config.MOTION_THRESHOLD)
     
+    start_time = time.time()
+    processed_count = 0
     last_processed_idx = -999
     
     batch    = []
@@ -261,6 +263,18 @@ def index_video_task(
     print(f"Indexing visual frames: {video_id} (Adaptive={adaptive_fps}, Tiled={tiled_encoding})")
     if task_id and task_id in active_tasks:
         active_tasks[task_id]["status"] = "Indexing visual frames..."
+        active_tasks[task_id]["metrics"] = {
+            "total_frames": total_frames,
+            "processed_frames": 0,
+            "skipped_frames": 0,
+            "cpu_usage": 0.0,
+            "ram_usage": 0.0,
+            "vram_allocated_mb": 0.0,
+            "vram_reserved_mb": 0.0,
+            "speed_fps": 0.0,
+            "elapsed_str": "0s",
+            "eta_str": "Calculating..."
+        }
 
     motion_score = 1.0
     has_motion = True
@@ -298,6 +312,7 @@ def index_video_task(
             break
 
         last_processed_idx = idx
+        processed_count += 1
 
         with pipeline_lock:
             result    = pipeline.process_frame(frame, idx)
@@ -357,6 +372,41 @@ def index_video_task(
 
         idx += 1
         if task_id and task_id in active_tasks and idx % 15 == 0:
+            import psutil
+            import torch
+            elapsed = time.time() - start_time
+            speed = round(idx / elapsed, 1) if elapsed > 0 else 0.0
+            
+            # Calculate ETA
+            eta_str = "Calculating..."
+            if idx > 10 and speed > 0:
+                rem_frames = max(0, total_frames - idx)
+                eta_s = rem_frames / speed
+                if eta_s < 60:
+                    eta_str = f"{int(eta_s)}s"
+                else:
+                    eta_str = f"{int(eta_s // 60)}m {int(eta_s % 60)}s"
+            
+            elapsed_str = f"{int(elapsed)}s" if elapsed < 60 else f"{int(elapsed // 60)}m {int(elapsed % 60)}s"
+
+            vram_alloc = 0.0
+            vram_res = 0.0
+            if torch.cuda.is_available():
+                vram_alloc = round(torch.cuda.memory_allocated() / (1024 * 1024), 1)
+                vram_res = round(torch.cuda.memory_reserved() / (1024 * 1024), 1)
+                
+            active_tasks[task_id]["metrics"] = {
+                "total_frames": total_frames,
+                "processed_frames": processed_count,
+                "skipped_frames": max(0, idx - processed_count),
+                "cpu_usage": psutil.cpu_percent(),
+                "ram_usage": psutil.virtual_memory().percent,
+                "vram_allocated_mb": vram_alloc,
+                "vram_reserved_mb": vram_res,
+                "speed_fps": speed,
+                "elapsed_str": elapsed_str,
+                "eta_str": eta_str
+            }
             pct = min(99.0, (idx / total_frames) * 100)
             active_tasks[task_id]["progress"] = round(pct, 1)
 
@@ -369,8 +419,24 @@ def index_video_task(
 
     # Set status to 100% and ready (so the user doesn't wait for background Whisper/OCR)
     if task_id and task_id in active_tasks:
+        elapsed = time.time() - start_time
+        elapsed_str = f"{int(elapsed)}s" if elapsed < 60 else f"{int(elapsed // 60)}m {int(elapsed % 60)}s"
+        speed = round(idx / elapsed, 1) if elapsed > 0 else 0.0
+        
         active_tasks[task_id]["status"] = "Ready to search!"
         active_tasks[task_id]["progress"] = 100.0
+        active_tasks[task_id]["metrics"] = {
+            "total_frames": total_frames,
+            "processed_frames": processed_count,
+            "skipped_frames": max(0, idx - processed_count),
+            "cpu_usage": 0.0,
+            "ram_usage": 0.0,
+            "vram_allocated_mb": 0.0,
+            "vram_reserved_mb": 0.0,
+            "speed_fps": speed,
+            "elapsed_str": elapsed_str,
+            "eta_str": "Completed"
+        }
         # Auto-remove completed tasks after 15 seconds
         def cleanup():
             time.sleep(15)
@@ -584,9 +650,10 @@ async def add_stream(request: StreamRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/v1/search/text", response_model=List[SearchResult])
+@app.post("/v1/search/text")
 async def search_text(request: TextSearchRequest):
     """Search video content using a natural language query."""
+    start_time = time.time()
     query_k = max(request.k * 20, 500) if request.anchor_only else max(request.k * 5, 100)
     raw_results = search_index.search_by_text(request.query, k=query_k)
     
@@ -688,12 +755,28 @@ async def search_text(request: TextSearchRequest):
     # never receive confidently-wrong answers for absent queries.
     WEAK_THRESHOLD = 0.22
     if results and results[0].similarity < WEAK_THRESHOLD:
-        return []
+        results = []
 
-    return results[:request.k]
+    # Calculate computation metrics
+    import psutil
+    import torch
+    duration_ms = round((time.time() - start_time) * 1000.0, 1)
+    vram_alloc = 0.0
+    if torch.cuda.is_available():
+        vram_alloc = round(torch.cuda.memory_allocated() / (1024 * 1024), 1)
+
+    headers = {
+        "X-Computation-Time-Ms": str(duration_ms),
+        "X-Computation-CPU-Percent": str(psutil.cpu_percent()),
+        "X-Computation-RAM-Percent": str(psutil.virtual_memory().percent),
+        "X-Computation-VRAM-Allocated-MB": str(vram_alloc),
+    }
+
+    from fastapi.encoders import jsonable_encoder
+    return JSONResponse(content=jsonable_encoder(results[:request.k]), headers=headers)
 
 
-@app.post("/v1/search/image", response_model=List[SearchResult])
+@app.post("/v1/search/image")
 async def search_image(
     file: UploadFile = File(...),
     k: int = 10,
@@ -703,6 +786,7 @@ async def search_image(
     temporal_dedup: Optional[bool] = True
 ):
     """Search for similar scenes using an image."""
+    start_time = time.time()
     import cv2
     import numpy as np
 
@@ -749,7 +833,7 @@ async def search_image(
                 deduped.append(r)
         results = deduped
 
-    return [
+    res_list = [
         SearchResult(
             video_path = r.video_path,
             camera_id  = r.camera_id,
@@ -760,6 +844,24 @@ async def search_image(
         )
         for r in results[:k]
     ]
+
+    # Calculate computation metrics
+    import psutil
+    import torch
+    duration_ms = round((time.time() - start_time) * 1000.0, 1)
+    vram_alloc = 0.0
+    if torch.cuda.is_available():
+        vram_alloc = round(torch.cuda.memory_allocated() / (1024 * 1024), 1)
+
+    headers = {
+        "X-Computation-Time-Ms": str(duration_ms),
+        "X-Computation-CPU-Percent": str(psutil.cpu_percent()),
+        "X-Computation-RAM-Percent": str(psutil.virtual_memory().percent),
+        "X-Computation-VRAM-Allocated-MB": str(vram_alloc),
+    }
+
+    from fastapi.encoders import jsonable_encoder
+    return JSONResponse(content=jsonable_encoder(res_list), headers=headers)
 
 
 @app.post("/v1/chat")

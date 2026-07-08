@@ -683,6 +683,12 @@
           </div>
           <p class="card-sub" id="results-count-title">Top matching keyframes from your indexed videos.</p>
           
+          <div id="search-metrics-container" style="display:none;background:var(--bg-soft);padding:8px 12px;border-radius:var(--radius-sm);font-size:11px;color:var(--text);margin-bottom:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;border:1px solid var(--border);">
+            <div>⏱️ Comparison: <b id="search-time">0ms</b></div>
+            <div>⚡ CPU / RAM: <b id="search-cpu">0%</b> / <b id="search-ram">0%</b></div>
+            <div>🎮 VRAM: <b id="search-vram">0 MB</b></div>
+          </div>
+
           <div class="results-scroll-container" id="results-container">
             <div style="grid-column:1/-1;text-align:center;padding:60px 0;color:var(--muted);font-size:13px;">No searches performed yet. Enter a query in Card 3.</div>
           </div>
@@ -1051,6 +1057,17 @@
         tasksContainer.innerHTML = '';
         taskKeys.forEach(tid => {
           const task = activeTasks[tid];
+          const metricsHtml = task.metrics ? `
+            <div style="font-size: 10.5px; color: var(--muted); border-top: 1px solid var(--border-soft); padding-top: 8px; margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+              <div>⏱️ Elapsed: <b>${task.metrics.elapsed_str || '0s'}</b></div>
+              <div>⏳ ETA: <b>${task.metrics.eta_str || 'Calculating...'}</b></div>
+              <div>⚡ Speed: <b>${task.metrics.speed_fps || 0} FPS</b></div>
+              <div>📊 CPU/RAM: <b>${task.metrics.cpu_usage || 0}% / ${task.metrics.ram_usage || 0}%</b></div>
+              ${task.metrics.vram_allocated_mb ? `<div>🎮 VRAM: <b>${task.metrics.vram_allocated_mb} MB</b></div>` : ''}
+              <div style="grid-column: 1 / -1;">🎞️ Frames: <b>${task.metrics.processed_frames || 0} proc / ${task.metrics.skipped_frames || 0} skip</b></div>
+            </div>
+          ` : '';
+
           tasksContainer.innerHTML += `
             <div style="background: var(--card); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border);">
               <div style="display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 700; margin-bottom: 6px;">
@@ -1061,6 +1078,7 @@
               <div class="progress-track show" style="height: 6px; margin-top: 4px;">
                 <div class="progress-fill" style="width: ${task.progress}%; transition: width 0.3s ease;"></div>
               </div>
+              ${metricsHtml}
             </div>
           `;
         });
@@ -1247,6 +1265,22 @@
           min_similarity: 0.0
         })
       });
+
+      // Extract computation metrics from response headers
+      const timeMs = res.headers.get('X-Computation-Time-Ms');
+      const cpu = res.headers.get('X-Computation-CPU-Percent');
+      const ram = res.headers.get('X-Computation-RAM-Percent');
+      const vram = res.headers.get('X-Computation-VRAM-Allocated-MB');
+
+      if (timeMs) {
+        document.getElementById('search-metrics-container').style.display = 'flex';
+        document.getElementById('search-time').innerText = `${timeMs}ms`;
+        document.getElementById('search-cpu').innerText = `${cpu || 0}%`;
+        document.getElementById('search-ram').innerText = `${ram || 0}%`;
+        document.getElementById('search-vram').innerText = `${vram || 0} MB`;
+      } else {
+        document.getElementById('search-metrics-container').style.display = 'none';
+      }
 
       const data = await res.json();
       renderSearchResults(data);
