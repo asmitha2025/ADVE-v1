@@ -262,47 +262,49 @@ def index_video_task(
     if task_id and task_id in active_tasks:
         active_tasks[task_id]["status"] = "Indexing visual frames..."
 
+    motion_score = 1.0
+    has_motion = True
+
     while cap.isOpened():
+        # Determine the skip size for the next frame
+        if last_processed_idx == -999:
+            current_skip = 1
+        else:
+            if not adaptive_fps:
+                current_skip = max(1, int(fps / config.PROCESS_FPS))
+            else:
+                if motion_score < 0.003:
+                    current_skip = int(fps / config.MIN_PROCESS_FPS)
+                elif motion_score < 0.01:
+                    current_skip = int(fps / 2.0)
+                elif motion_score < 0.03:
+                    current_skip = int(fps / config.PROCESS_FPS)
+                else:
+                    current_skip = max(1, int(fps / config.MAX_PROCESS_FPS))
+
+        # Skip frames using cheap cap.grab() which reads but doesn't decode
+        skipped_successfully = True
+        for _ in range(current_skip - 1):
+            if not cap.grab():
+                skipped_successfully = False
+                break
+            idx += 1
+
+        if not skipped_successfully:
+            break
+
         ret, frame = cap.read()
         if not ret:
             break
-
-        # Calculate motion score to determine next skip size dynamically
-        if last_processed_idx == -999:
-            has_motion = True
-            motion_score = 1.0
-        else:
-            has_motion, motion_score = motion_filter.has_motion(frame)
-
-        # Skip size mapping
-        if not adaptive_fps:
-            current_skip = max(1, int(fps / config.PROCESS_FPS))
-        else:
-            if motion_score < 0.003:
-                current_skip = int(fps / config.MIN_PROCESS_FPS)
-            elif motion_score < 0.01:
-                current_skip = int(fps / 2.0)
-            elif motion_score < 0.03:
-                current_skip = int(fps / config.PROCESS_FPS)
-            else:
-                current_skip = max(1, int(fps / config.MAX_PROCESS_FPS))
-
-        # Check if we should skip the current frame
-        if not adaptive_fps:
-            if idx - last_processed_idx < current_skip:
-                idx += 1
-                continue
-        else:
-            if idx - last_processed_idx < current_skip and (idx - last_processed_idx) < int(fps / config.MIN_PROCESS_FPS):
-                if not has_motion or (idx - last_processed_idx) < current_skip:
-                    idx += 1
-                    continue
 
         last_processed_idx = idx
 
         with pipeline_lock:
             result    = pipeline.process_frame(frame, idx)
         timestamp = idx / fps
+
+        # Calculate motion score on this processed frame to decide the next skip size
+        has_motion, motion_score = motion_filter.has_motion(frame)
 
         # Extract detected object labels for Two-Stage search metadata
         obj_classes = [obj["class_name"] for obj in result.get("objects", [])]

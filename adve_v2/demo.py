@@ -858,6 +858,40 @@ def search_and_retrieve(query: str, clip_duration: float, use_dynamic_duration: 
 
 
 
+def extract_message_text(item) -> str:
+    if hasattr(item, "content"):
+        content = item.content
+    elif isinstance(item, dict):
+        content = item.get("content", "")
+    else:
+        content = item
+
+    if isinstance(content, str):
+        return content
+    elif isinstance(content, list):
+        # Extract text from list of message dictionaries/objects
+        texts = []
+        for c in content:
+            if isinstance(c, dict):
+                if c.get("type") == "text":
+                    texts.append(c.get("text", ""))
+            elif hasattr(c, "text"):
+                texts.append(c.text)
+        return " ".join(texts)
+    elif isinstance(content, dict):
+        if content.get("type") == "text":
+            return content.get("text", "")
+        return str(content)
+    return str(content)
+
+def extract_message_role(item) -> str:
+    if hasattr(item, "role"):
+        return item.role
+    elif isinstance(item, dict):
+        return item.get("role", "user")
+    return "user"
+
+
 def chatbot_rag_answer(question: str, history: list):
     """RAG Answer Engine: Send top matching frames and dialog as context to Groq to answer conversational queries."""
     global active_video_path
@@ -905,14 +939,14 @@ def chatbot_rag_answer(question: str, history: list):
         if history:
             history_context = "Here is the conversation history so far for context:\n"
             for item in history:
-                if isinstance(item, dict):
-                    role = item.get("role", "user")
-                    content = item.get("content", "")
-                    history_context += f"{role.capitalize()}: {content}\n"
-                elif isinstance(item, (list, tuple)) and len(item) == 2:
-                    u_text = item[0]["content"] if isinstance(item[0], dict) else item[0]
-                    a_text = item[1]["content"] if isinstance(item[1], dict) else item[1]
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    u_text = extract_message_text(item[0])
+                    a_text = extract_message_text(item[1])
                     history_context += f"User: {u_text}\nAssistant: {a_text}\n"
+                else:
+                    role = extract_message_role(item)
+                    content = extract_message_text(item)
+                    history_context += f"{role.capitalize()}: {content}\n"
             history_context += "\n"
 
         prompt_text = (
@@ -1068,8 +1102,8 @@ def chatbot_chat_flow(message: str, history: list, clip_duration: float, use_dyn
             is_dict_format = False
         
     if is_dict_format:
-        updated_history.append({"role": "user", "content": message})
-        updated_history.append({"role": "assistant", "content": answer})
+        updated_history.append(gr.ChatMessage(role="user", content=message))
+        updated_history.append(gr.ChatMessage(role="assistant", content=answer))
     else:
         updated_history.append((message, answer))
         

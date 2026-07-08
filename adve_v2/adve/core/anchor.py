@@ -74,7 +74,11 @@ class AnchorProcessor:
                 obj_embedding = self._embed_object(roi)
 
                 # Compute histogram for appearance check (Improvement 6)
-                hist = cv2.calcHist([roi], [0, 1, 2], None, [8, 8, 8],
+                roi_small = roi
+                rh, rw = roi.shape[:2]
+                if rh > 64 or rw > 64:
+                    roi_small = cv2.resize(roi, (64, 64))
+                hist = cv2.calcHist([roi_small], [0, 1, 2], None, [8, 8, 8],
                                     [0, 256, 0, 256, 0, 256])
                 hist = cv2.normalize(hist, hist).flatten()
 

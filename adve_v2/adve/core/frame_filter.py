@@ -17,7 +17,14 @@ class FrameFilter:
         Returns (has_motion, motion_score).
         If has_motion is False, skip YOLO — nothing changed.
         """
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        h, w = frame.shape[:2]
+        scale = 128.0 / max(h, w)
+        if scale < 1.0:
+            frame_small = cv2.resize(frame, (0, 0), fx=scale, fy=scale)
+        else:
+            frame_small = frame
+
+        gray = cv2.cvtColor(frame_small, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (5, 5), 0)
 
         if self.prev_gray is None:

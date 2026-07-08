@@ -119,8 +119,14 @@ class DeltaTracker:
             if anchor_hist is None:
                 continue
 
+            # Downsample crop for fast histogram calculation
+            crop_small = curr_crop
+            ch, cw = curr_crop.shape[:2]
+            if ch > 64 or cw > 64:
+                crop_small = cv2.resize(curr_crop, (64, 64))
+
             curr_hist = cv2.calcHist(
-                [curr_crop], [0,1,2], None, [8,8,8], [0,256,0,256,0,256]
+                [crop_small], [0,1,2], None, [8,8,8], [0,256,0,256,0,256]
             )
             curr_hist = cv2.normalize(curr_hist, curr_hist).flatten()
 

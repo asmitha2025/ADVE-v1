@@ -61,6 +61,11 @@ class ADVEPipeline:
         self.force_refresh:    bool = False
         motion_threshold = getattr(config, "MOTION_THRESHOLD", 0.02)
         self.frame_filter = FrameFilter(motion_threshold=motion_threshold)
+        
+        # Cached ORB keypoints and descriptors for fast homography
+        self.anchor_kp = None
+        self.anchor_des = None
+        self.anchor_orb_scale = 1.0
 
     def reset(self) -> None:
         """Resets the pipeline state to start processing a new video."""
@@ -72,6 +77,9 @@ class ADVEPipeline:
         self.prev_frame = None
         self.force_refresh = False
         self.frame_filter.prev_gray = None
+        self.anchor_kp = None
+        self.anchor_des = None
+        self.anchor_orb_scale = 1.0
 
 
     # ------------------------------------------------------------------
@@ -89,38 +97,38 @@ class ADVEPipeline:
     def _appearance_delta(self, f1: np.ndarray, f2: np.ndarray) -> float:
         """Fast histogram-based appearance change score."""
         def hist(f):
-            h = cv2.calcHist([f], [0, 1, 2], None, [8, 8, 8],
+            f_small = cv2.resize(f, (64, 64))
+            h = cv2.calcHist([f_small], [0, 1, 2], None, [8, 8, 8],
                              [0, 256, 0, 256, 0, 256])
             return cv2.normalize(h, h).flatten()
 
         corr = cv2.compareHist(hist(f1), hist(f2), cv2.HISTCMP_CORREL)
         return float(1.0 - corr)   # 0 = identical, 1 = completely different
 
-    def _estimate_homography(self, img1: np.ndarray, img2: np.ndarray) -> Optional[np.ndarray]:
+    def _estimate_homography(self, img2: np.ndarray) -> Optional[np.ndarray]:
         try:
-            # Resize images to a max dimension of 480px to speed up ORB computation on CPU
-            h, w = img1.shape[:2]
-            scale = 480.0 / max(h, w)
+            if self.anchor_kp is None or self.anchor_des is None:
+                return None
+
+            h, w = img2.shape[:2]
+            scale = self.anchor_orb_scale
             if scale < 1.0:
-                img1_small = cv2.resize(img1, (0, 0), fx=scale, fy=scale)
                 img2_small = cv2.resize(img2, (0, 0), fx=scale, fy=scale)
             else:
-                img1_small = img1
                 img2_small = img2
-                scale = 1.0
 
-            gray1 = cv2.cvtColor(img1_small, cv2.COLOR_BGR2GRAY)
             gray2 = cv2.cvtColor(img2_small, cv2.COLOR_BGR2GRAY)
             orb = cv2.ORB_create(nfeatures=300)
-            kp1, des1 = orb.detectAndCompute(gray1, None)
             kp2, des2 = orb.detectAndCompute(gray2, None)
-            if des1 is None or des2 is None or len(kp1) < 10 or len(kp2) < 10:
+            if des2 is None or len(kp2) < 10:
                 return None
+
             bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-            matches = bf.match(des1, des2)
+            matches = bf.match(self.anchor_des, des2)
             if len(matches) < 8:
                 return None
-            src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
+
+            src_pts = np.float32([self.anchor_kp[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
             dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
             
             # Scale coordinates back to original size before estimating homography
@@ -193,7 +201,12 @@ class ADVEPipeline:
             refresh = True
             self.force_refresh = False
         else:
-            homography = self._estimate_homography(self.anchor_frame, frame)
+            # Skip homography estimation if motion is low
+            if score < 0.01:
+                homography = None
+            else:
+                homography = self._estimate_homography(frame)
+
             current_graph, delta = self.delta_tracker.track(
                 frame, self.anchor_graph, homography=homography
             )
@@ -206,6 +219,22 @@ class ADVEPipeline:
             self.anchor_frame = frame.copy()
             self.anchor_graph, self.anchor_embedding = self.anchor_proc.process(frame)
             
+            # Cache anchor ORB keypoints and descriptors
+            try:
+                h, w = self.anchor_frame.shape[:2]
+                scale = 480.0 / max(h, w)
+                if scale < 1.0:
+                    img_small = cv2.resize(self.anchor_frame, (0, 0), fx=scale, fy=scale)
+                else:
+                    img_small = self.anchor_frame
+                gray = cv2.cvtColor(img_small, cv2.COLOR_BGR2GRAY)
+                orb = cv2.ORB_create(nfeatures=300)
+                self.anchor_kp, self.anchor_des = orb.detectAndCompute(gray, None)
+                self.anchor_orb_scale = scale
+            except Exception:
+                self.anchor_kp, self.anchor_des = None, None
+                self.anchor_orb_scale = 1.0
+
             # Manage rolling anchor buffer (Improvement 3)
             self.anchor_buffer.append(self.anchor_embedding)
             if len(self.anchor_buffer) > self.anchor_buffer_max:
