@@ -42,36 +42,39 @@ active_tasks = {}
 pipeline_lock = threading.Lock()
 
 # Warm up CLIP and Whisper models on the main thread to prevent thread-safety crashes on Windows
-try:
-    print("[API Startup] Warming up CLIP text encoder...")
-    search_index.search_by_text("warmup", k=1)
-    print("[API Startup] CLIP model warmed up successfully.")
-except Exception as e:
-    print(f"[API Startup] Warning: CLIP warmup failed: {e}")
+if os.environ.get("SPACE_ID") or os.environ.get("LOW_MEMORY"):
+    print("[API Startup] Running in low-memory/Space mode: Skipping model warmup to conserve memory.")
+else:
+    try:
+        print("[API Startup] Warming up CLIP text encoder...")
+        search_index.search_by_text("warmup", k=1)
+        print("[API Startup] CLIP model warmed up successfully.")
+    except Exception as e:
+        print(f"[API Startup] Warning: CLIP warmup failed: {e}")
 
-try:
-    print("[API Startup] Warming up Whisper model...")
-    from adve.core.audio_transcriber import AudioTranscriber
-    transcriber = AudioTranscriber(model_name="tiny")
-    transcriber._load_model()
-    print("[API Startup] Whisper model warmed up successfully.")
-except Exception as e:
-    print(f"[API Startup] Warning: Whisper warmup failed: {e}")
+    try:
+        print("[API Startup] Warming up Whisper model...")
+        from adve.core.audio_transcriber import AudioTranscriber
+        transcriber = AudioTranscriber(model_name="tiny")
+        transcriber._load_model()
+        print("[API Startup] Whisper model warmed up successfully.")
+    except Exception as e:
+        print(f"[API Startup] Warning: Whisper warmup failed: {e}")
 
-try:
-    print("[API Startup] Warming up ADVE Pipeline (YOLO & Reconstructor)...")
-    import numpy as np
-    config = Config()
-    global_pipeline = ADVEPipeline(
-        config,
-        clip_model = search_index._clip_model,
-        clip_preprocess = search_index._clip_prep
-    )
-    dummy_frame = np.zeros((320, 320, 3), dtype=np.uint8)
-    global_pipeline.process_frame(dummy_frame, 0, no_validation=True)
-    print("[API Startup] ADVE Pipeline warmed up successfully.")
-except Exception as e:
-    print(f"[API Startup] Warning: ADVE Pipeline warmup failed: {e}")
+    try:
+        print("[API Startup] Warming up ADVE Pipeline (YOLO & Reconstructor)...")
+        import numpy as np
+        config = Config()
+        global_pipeline = ADVEPipeline(
+            config,
+            clip_model = search_index._clip_model,
+            clip_preprocess = search_index._clip_prep
+        )
+        dummy_frame = np.zeros((320, 320, 3), dtype=np.uint8)
+        global_pipeline.process_frame(dummy_frame, 0, no_validation=True)
+        print("[API Startup] ADVE Pipeline warmed up successfully.")
+    except Exception as e:
+        print(f"[API Startup] Warning: ADVE Pipeline warmup failed: {e}")
 
 global_audio_indexer = None
 try:
