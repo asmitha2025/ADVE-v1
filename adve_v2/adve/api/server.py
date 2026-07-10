@@ -283,6 +283,19 @@ def index_video_task(
     has_motion = True
 
     while cap.isOpened():
+        # Check if paused or cancelled by user
+        if task_id and task_id in active_tasks:
+            if active_tasks[task_id].get("cancelled"):
+                print(f"[Task {task_id}] Indexing cancelled by user.")
+                break
+            while active_tasks[task_id].get("paused"):
+                time.sleep(0.5)
+                if active_tasks[task_id].get("cancelled"):
+                    break
+            if active_tasks[task_id].get("cancelled"):
+                print(f"[Task {task_id}] Indexing cancelled by user while paused.")
+                break
+
         # Determine the skip size for the next frame
         if last_processed_idx == -999:
             current_skip = 1
@@ -413,10 +426,21 @@ def index_video_task(
             pct = min(99.0, (idx / total_frames) * 100)
             active_tasks[task_id]["progress"] = round(pct, 1)
 
-    if batch:
+    # Check if task was cancelled before ending
+    is_cancelled = False
+    if task_id and task_id in active_tasks:
+        if active_tasks[task_id].get("cancelled"):
+            is_cancelled = True
+            active_tasks.pop(task_id, None)
+
+    if batch and not is_cancelled:
         search_index.add_batch(batch)
 
     cap.release()
+    if is_cancelled:
+        print(f"Indexing visual frames for {video_id} cancelled.")
+        return
+
     search_index.save()
     print(f"Indexed {idx} visual frames from {video_id}")
 
@@ -1009,6 +1033,33 @@ async def get_stats():
         "cameras": camera_mgr.status(),
         "active_tasks": active_tasks
     }
+
+
+@app.post("/v1/tasks/{task_id}/pause")
+async def pause_task(task_id: str):
+    if task_id not in active_tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    active_tasks[task_id]["paused"] = True
+    active_tasks[task_id]["status"] = "Paused"
+    return {"status": "success", "message": "Task paused"}
+
+
+@app.post("/v1/tasks/{task_id}/resume")
+async def resume_task(task_id: str):
+    if task_id not in active_tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    active_tasks[task_id]["paused"] = False
+    active_tasks[task_id]["status"] = "Indexing visual frames..."
+    return {"status": "success", "message": "Task resumed"}
+
+
+@app.post("/v1/tasks/{task_id}/cancel")
+async def cancel_task(task_id: str):
+    if task_id not in active_tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    active_tasks[task_id]["cancelled"] = True
+    active_tasks[task_id]["status"] = "Cancelling..."
+    return {"status": "success", "message": "Task cancellation initiated"}
 
 
 @app.get("/", response_class=HTMLResponse)
