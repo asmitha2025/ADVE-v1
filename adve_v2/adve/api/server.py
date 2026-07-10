@@ -464,11 +464,7 @@ def index_video_task(
             "elapsed_str": elapsed_str,
             "eta_str": "Completed"
         }
-        # Auto-remove completed tasks after 15 seconds
-        def cleanup():
-            time.sleep(15)
-            active_tasks.pop(task_id, None)
-        threading.Thread(target=cleanup, daemon=True).start()
+        pass
 
     # Launch background task for EasyOCR
     if ocr:
@@ -1060,6 +1056,12 @@ async def cancel_task(task_id: str):
     active_tasks[task_id]["cancelled"] = True
     active_tasks[task_id]["status"] = "Cancelling..."
     return {"status": "success", "message": "Task cancellation initiated"}
+
+
+@app.post("/v1/tasks/{task_id}/dismiss")
+async def dismiss_task(task_id: str):
+    active_tasks.pop(task_id, None)
+    return {"status": "success", "message": "Task dismissed"}
 
 
 @app.get("/", response_class=HTMLResponse)

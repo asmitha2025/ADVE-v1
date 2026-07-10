@@ -29,24 +29,15 @@ class ADVEPipeline:
         self.config = config
         os.makedirs(config.OUTPUT_DIR, exist_ok=True)
 
-        # Single shared YOLO instance — preserves ByteTrack ID state across frames
-        self.yolo = YOLO(config.YOLO_MODEL)
-        yolo_device = getattr(config, "YOLO_DEVICE", config.DEVICE)
-        self.yolo.to(yolo_device)
-        
-        # Enable FP16 (half precision) for YOLO on CUDA
-        yolo_half = getattr(config, "YOLO_HALF", True)
-        if yolo_half and yolo_device == "cuda":
-            try:
-                self.yolo.model.half()
-                print("[ADVEPipeline] Enabled FP16 (Half Precision) for YOLOv8 tracking on GPU.")
-            except Exception as e:
-                print(f"[ADVEPipeline] Warning: Failed to convert YOLO model to FP16: {e}")
+        self._yolo = None
+        self._yolo_device = getattr(config, "YOLO_DEVICE", config.DEVICE)
+        self._clip_model = clip_model
+        self._clip_preprocess = clip_preprocess
 
-        self.anchor_proc     = AnchorProcessor(config, self.yolo, clip_model=clip_model, clip_preprocess=clip_preprocess)
+        self.anchor_proc     = AnchorProcessor(config, yolo=None, clip_model=clip_model, clip_preprocess=clip_preprocess)
         yolo_device = getattr(config, "YOLO_DEVICE", config.DEVICE)
         yolo_imgsz = getattr(config, "YOLO_IMGSZ", 320)
-        self.delta_tracker   = DeltaTracker(self.yolo, device=yolo_device, imgsz=yolo_imgsz)
+        self.delta_tracker   = DeltaTracker(self, device=yolo_device, imgsz=yolo_imgsz)
         self.reconstructor   = EmbeddingReconstructor(config.MLP_MODEL_PATH)
         self.validator       = Validator(config)
 
@@ -66,6 +57,29 @@ class ADVEPipeline:
         self.anchor_kp = None
         self.anchor_des = None
         self.anchor_orb_scale = 1.0
+
+    @property
+    def yolo(self):
+        if self._yolo is None:
+            from ultralytics import YOLO
+            import torch
+            device = self._yolo_device
+            if not torch.cuda.is_available() and device == "cuda":
+                device = "cpu"
+            print(f"[ADVEPipeline] Loading YOLO model '{self.config.YOLO_MODEL}' on {device}...")
+            self._yolo = YOLO(self.config.YOLO_MODEL)
+            self._yolo.to(device)
+            
+            yolo_half = getattr(self.config, "YOLO_HALF", True)
+            if yolo_half and device == "cuda":
+                try:
+                    self._yolo.model.half()
+                    print("[ADVEPipeline] Enabled FP16 (Half Precision) for YOLOv8 tracking on GPU.")
+                except Exception as e:
+                    print(f"[ADVEPipeline] Warning: Failed to convert YOLO model to FP16: {e}")
+            
+            self.anchor_proc.yolo = self._yolo
+        return self._yolo
 
     def reset(self) -> None:
         """Resets the pipeline state to start processing a new video."""
