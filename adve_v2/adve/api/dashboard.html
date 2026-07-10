@@ -926,7 +926,9 @@
 
 <script>
 (function() {
-  const API_BASE = window.location.origin;
+  const API_BASE = (window.location.origin && window.location.origin !== 'null' && !window.location.origin.startsWith('file:')) 
+    ? window.location.origin 
+    : 'http://localhost:8000';
 
   // ---- Page Navigation ----
   const pages = {
