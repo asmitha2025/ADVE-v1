@@ -1125,6 +1125,10 @@ async def get_frame(video_id: str, frame_idx: int):
         else:
             raise HTTPException(status_code=404, detail=f"Video file not found: {video_id}")
             
+    if frame_idx == -1:
+        from fastapi.responses import FileResponse
+        return FileResponse(video_path, media_type="video/mp4")
+
     buffer_bytes = read_frame_cached(video_path, frame_idx)
     if buffer_bytes is None:
         raise HTTPException(status_code=400, detail=f"Could not read frame {frame_idx}")
