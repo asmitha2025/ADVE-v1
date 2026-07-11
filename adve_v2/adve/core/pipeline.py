@@ -215,8 +215,8 @@ class ADVEPipeline:
             refresh = True
             self.force_refresh = False
         else:
-            # Skip homography estimation if motion is low
-            if score < 0.01:
+            # Skip homography estimation if motion is low, or on CPU / Hugging Face Spaces to prioritize speed
+            if score < 0.03 or os.environ.get("SPACE_ID") or os.environ.get("LOW_MEMORY") or not torch.cuda.is_available():
                 homography = None
             else:
                 homography = self._estimate_homography(frame)
@@ -267,18 +267,25 @@ class ADVEPipeline:
             appearance_deltas = self.delta_tracker.compute_appearance_delta_per_object(
                 frame, self.anchor_graph, current_graph
             )
+            objs_to_reembed = []
+            rois_to_reembed = []
             for oid, app_delta in appearance_deltas.items():
                 if app_delta > 0.15: # threshold
                     obj = current_graph.objects[oid]
                     x1, y1, x2, y2 = obj.bbox
                     roi = frame[y1:y2, x1:x2]
                     if roi.size > 0:
-                        # Re-embed only that one object using DINOv2
-                        obj.embedding = self.anchor_proc._embed_object(roi)
-                        # Cache new histogram
-                        h = cv2.calcHist([roi], [0, 1, 2], None, [8, 8, 8],
-                                         [0, 256, 0, 256, 0, 256])
-                        obj.appearance_hist = cv2.normalize(h, h).flatten()
+                        objs_to_reembed.append(obj)
+                        rois_to_reembed.append(roi)
+            
+            if rois_to_reembed:
+                embeddings = self.anchor_proc._embed_batch(rois_to_reembed)
+                for obj, emb, roi in zip(objs_to_reembed, embeddings, rois_to_reembed):
+                    obj.embedding = emb
+                    # Cache new histogram
+                    h = cv2.calcHist([roi], [0, 1, 2], None, [8, 8, 8],
+                                     [0, 256, 0, 256, 0, 256])
+                    obj.appearance_hist = cv2.normalize(h, h).flatten()
 
             reconstructed = self.reconstructor.reconstruct(
                 self.anchor_graph,

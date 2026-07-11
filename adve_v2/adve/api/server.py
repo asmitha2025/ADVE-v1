@@ -29,6 +29,13 @@ from adve.core.pipeline import ADVEPipeline
 from adve.core.config   import Config
 from adve.core.stream   import MultiCameraManager
 
+from adve.sports.detector import SportsEventDetector
+from adve.sports.formation import FormationTracker
+from adve.sports.generator import HighlightGenerator
+from adve.sports.heatmap import PlayerHeatmap
+import cv2
+import json
+
 DATA_DIR = os.environ.get("ADVE_DATA_DIR", "adve_v2/data")
 INDEX_DIR = os.path.join(DATA_DIR, "main_index")
 UPLOADS_DIR = os.path.join(DATA_DIR, "uploads")
@@ -44,6 +51,12 @@ pipeline_lock = threading.Lock()
 # Warm up CLIP and Whisper models on the main thread to prevent thread-safety crashes on Windows
 if os.environ.get("SPACE_ID") or os.environ.get("LOW_MEMORY"):
     print("[API Startup] Running in low-memory/Space mode: Skipping model warmup to conserve memory.")
+    try:
+        import torch
+        torch.set_num_threads(1)
+        print("[API Startup] Set PyTorch to 1 CPU thread to optimize low-memory container usage.")
+    except Exception as e:
+        print(f"[API Startup] Warning: Failed to set PyTorch threads: {e}")
 else:
     try:
         print("[API Startup] Warming up CLIP text encoder...")
@@ -78,7 +91,7 @@ else:
 
 global_audio_indexer = None
 try:
-    print("[API Startup] Initializing and warming up AudioIndexer...")
+    print("[API Startup] Initializing AudioIndexer...")
     from adve.audio.indexer import AudioIndexer
     global_audio_indexer = AudioIndexer(
         search_index,
@@ -86,9 +99,12 @@ try:
         clip_model = search_index._clip_model,
         clip_prep = search_index._clip_prep
     )
-    global_audio_indexer._get_whisper()
-    global_audio_indexer._get_clip()
-    print("[API Startup] AudioIndexer warmed up successfully.")
+    if os.environ.get("SPACE_ID") or os.environ.get("LOW_MEMORY"):
+        print("[API Startup] Running in low-memory/Space mode: Skipping AudioIndexer model warmups.")
+    else:
+        global_audio_indexer._get_whisper()
+        global_audio_indexer._get_clip()
+        print("[API Startup] AudioIndexer warmed up successfully.")
 except Exception as e:
     print(f"[API Startup] Warning: AudioIndexer warmup failed: {e}")
 
@@ -182,6 +198,7 @@ class YouTubeIndexRequest(BaseModel):
     ocr: Optional[bool] = True
     whisper: Optional[bool] = True
     adaptive_fps: Optional[bool] = True
+    speed_preset: Optional[str] = "standard"
 
 class ChatRequest(BaseModel):
     question:       str
@@ -230,7 +247,8 @@ def index_video_task(
     tiled_encoding: bool = False,
     ocr: bool = True,
     whisper: bool = True,
-    adaptive_fps: bool = True
+    adaptive_fps: bool = True,
+    speed_preset: str = "standard"
 ):
     """Runs in background after upload. Decodes frames, runs ADVE, and schedules OCR/Audio indexing."""
     import cv2
@@ -241,7 +259,11 @@ def index_video_task(
     if pipeline is None:
         print("[API Startup fallback] Initializing new pipeline instance inside task...")
         config   = Config()
-        pipeline = ADVEPipeline(config)
+        pipeline = ADVEPipeline(
+            config,
+            clip_model = search_index._clip_model,
+            clip_preprocess = search_index._clip_prep
+        )
         
     with pipeline_lock:
         pipeline.reset()
@@ -252,6 +274,35 @@ def index_video_task(
     
     # Enforce adaptive frame skip (Adaptive FPS Upgrade)
     config = Config()
+    
+    # Map speed_preset to custom frame processing rates
+    process_fps = getattr(config, "PROCESS_FPS", 2.0)
+    min_process_fps = getattr(config, "MIN_PROCESS_FPS", 0.2)
+    max_process_fps = getattr(config, "MAX_PROCESS_FPS", 4.0)
+    
+    is_cpu_only = (config.DEVICE == "cpu" or os.environ.get("SPACE_ID") or os.environ.get("LOW_MEMORY"))
+    if is_cpu_only:
+        process_fps = 0.15
+        min_process_fps = 0.05
+        max_process_fps = 0.3
+        if speed_preset == "fast":
+            process_fps = 0.05
+            min_process_fps = 0.02
+            max_process_fps = 0.1
+        elif speed_preset == "high":
+            process_fps = 0.3
+            min_process_fps = 0.1
+            max_process_fps = 0.5
+    else:
+        if speed_preset == "fast":
+            process_fps = 0.5
+            min_process_fps = 0.1
+            max_process_fps = 1.0
+        elif speed_preset == "high":
+            process_fps = 4.0
+            min_process_fps = 0.5
+            max_process_fps = 8.0
+
     from adve.core.frame_filter import FrameFilter
     motion_filter = FrameFilter(motion_threshold=config.MOTION_THRESHOLD)
     
@@ -262,6 +313,9 @@ def index_video_task(
     batch    = []
     idx      = 0
     anchor_timestamps = [] # Track anchor timestamps (Tiled Encoding & OCR)
+    delta_timeline = []
+    position_timeline = []
+    player_counts = []
 
     print(f"Indexing visual frames: {video_id} (Adaptive={adaptive_fps}, Tiled={tiled_encoding})")
     if task_id and task_id in active_tasks:
@@ -301,16 +355,16 @@ def index_video_task(
             current_skip = 1
         else:
             if not adaptive_fps:
-                current_skip = max(1, int(fps / config.PROCESS_FPS))
+                current_skip = max(1, int(fps / process_fps))
             else:
                 if motion_score < 0.003:
-                    current_skip = int(fps / config.MIN_PROCESS_FPS)
+                    current_skip = int(fps / min_process_fps)
                 elif motion_score < 0.01:
-                    current_skip = int(fps / 2.0)
+                    current_skip = int(fps / (process_fps * 1.5)) if is_cpu_only else int(fps / 2.0)
                 elif motion_score < 0.03:
-                    current_skip = int(fps / config.PROCESS_FPS)
+                    current_skip = int(fps / process_fps)
                 else:
-                    current_skip = max(1, int(fps / config.MAX_PROCESS_FPS))
+                    current_skip = max(1, int(fps / max_process_fps))
 
         # Skip frames using cheap cap.grab() which reads but doesn't decode
         skipped_successfully = True
@@ -341,6 +395,33 @@ def index_video_task(
         obj_classes = [obj["class_name"] for obj in result.get("objects", [])]
         obj_metadata = ", ".join(set(obj_classes))
 
+        # --- Sports Analytics Processing ---
+        delta_timeline.append({
+            "timestamp": timestamp,
+            "magnitude": result.get("delta_magnitude", 0.0)
+        })
+
+        persons = [obj for obj in result.get("objects", []) if obj["class_name"] == "person"]
+        frame_h, frame_w = frame.shape[:2]
+        coords = []
+        for p in persons:
+            bbox = p["bbox"] # [x1, y1, x2, y2]
+            x_center = (bbox[0] + bbox[2]) / 2.0
+            y_bottom = bbox[3]
+            coords.append((x_center / frame_w, y_bottom / frame_h))
+            
+        position_timeline.append({
+            "timestamp": timestamp,
+            "positions": coords
+        })
+        
+        player_counts.append({
+            "timestamp": timestamp,
+            "team1": len(persons),
+            "team2": 0
+        })
+        # -----------------------------------
+
         # 1. Add global frame embedding
         batch.append({
             "video_path": video_id,
@@ -356,20 +437,33 @@ def index_video_task(
             anchor_timestamps.append(timestamp)
 
             # Tiled CLIP Encoding on Anchor Frames (Tiled Encoding / Small Objects)
-            if tiled_encoding and global_tiled_encoder is not None:
-                try:
-                    tile_results = global_tiled_encoder.encode_frame(frame, grid="2x2")
-                    for tile in tile_results[1:]: # skip global (already added)
-                        batch.append({
-                            "video_path": video_id,
-                            "camera_id":  f"{video_id} [TILE:{tile['tile_id']}]",
-                            "timestamp":  timestamp,
-                            "frame_idx":  idx,
-                            "embedding":  tile["embedding"],
-                            "is_anchor":  True,
-                        })
-                except Exception as e:
-                    print(f"Tiled encoding warning: {e}")
+            if tiled_encoding:
+                global global_tiled_encoder
+                if global_tiled_encoder is None:
+                    try:
+                        from adve.vision.tiled_encoder import TiledEncoder
+                        global_tiled_encoder = TiledEncoder(
+                            clip_model = pipeline.anchor_proc.clip_model,
+                            clip_prep  = pipeline.anchor_proc.clip_preprocess,
+                            device     = config.DEVICE,
+                        )
+                    except Exception as e:
+                        print(f"Failed to initialize TiledEncoder on demand: {e}")
+                
+                if global_tiled_encoder is not None:
+                    try:
+                        tile_results = global_tiled_encoder.encode_frame(frame, grid="2x2")
+                        for tile in tile_results[1:]: # skip global (already added)
+                            batch.append({
+                                "video_path": video_id,
+                                "camera_id":  f"{video_id} [TILE:{tile['tile_id']}]",
+                                "timestamp":  timestamp,
+                                "frame_idx":  idx,
+                                "embedding":  tile["embedding"],
+                                "is_anchor":  True,
+                            })
+                    except Exception as e:
+                        print(f"Tiled encoding warning: {e}")
 
         # 2. Add object-level crop embeddings (finding small details!)
         for obj in result.get("objects", []):
@@ -442,6 +536,20 @@ def index_video_task(
         return
 
     search_index.save()
+
+    # Save accumulated sports analytics raw timelines
+    sports_data_path = os.path.join(INDEX_DIR, f"{video_id}_sports_data.json")
+    try:
+        with open(sports_data_path, "w") as sf:
+            json.dump({
+                "delta_timeline": delta_timeline,
+                "position_timeline": position_timeline,
+                "player_counts": player_counts
+            }, sf)
+        print(f"Saved sports timelines to {sports_data_path}")
+    except Exception as ex:
+        print(f"Failed to save sports timelines: {ex}")
+
     print(f"Indexed {idx} visual frames from {video_id}")
 
     # Set status to 100% and ready (so the user doesn't wait for background Whisper/OCR)
@@ -489,7 +597,8 @@ def index_youtube_task(
     tiled_encoding: bool = False,
     ocr: bool = True,
     whisper: bool = True,
-    adaptive_fps: bool = True
+    adaptive_fps: bool = True,
+    speed_preset: str = "standard"
 ):
     """Downloads a YouTube video and indexes it in the background."""
     import yt_dlp
@@ -551,7 +660,8 @@ def index_youtube_task(
                     tiled_encoding=tiled_encoding,
                     ocr=ocr,
                     whisper=whisper,
-                    adaptive_fps=adaptive_fps
+                    adaptive_fps=adaptive_fps,
+                    speed_preset=speed_preset
                 )
             else:
                 if task_id in active_tasks:
@@ -600,7 +710,8 @@ async def index_video(
     tiled_encoding: bool = False,
     ocr: bool = True,
     whisper: bool = True,
-    adaptive_fps: bool = True
+    adaptive_fps: bool = True,
+    speed_preset: str = "standard"
 ):
     """Upload and index a video file. Returns immediately, indexes in background."""
     os.makedirs(UPLOADS_DIR, exist_ok=True)
@@ -624,7 +735,8 @@ async def index_video(
         tiled_encoding,
         ocr,
         whisper,
-        adaptive_fps
+        adaptive_fps,
+        speed_preset
     )
 
     return {
@@ -654,7 +766,8 @@ async def index_youtube(
         request.tiled_encoding,
         request.ocr,
         request.whisper,
-        request.adaptive_fps
+        request.adaptive_fps,
+        request.speed_preset
     )
     return {
         "status":   "indexing_started",
@@ -1099,18 +1212,22 @@ def read_frame_cached(video_path: str, frame_idx: int) -> Optional[bytes]:
 
 @app.get("/v1/frame")
 async def get_frame(video_id: str, frame_idx: int):
+    # Normalize Windows backslashes to forward slashes for Linux compatibility
+    video_id_clean = video_id.replace("\\", "/")
+    basename = os.path.basename(video_id_clean)
+
     # Try absolute or relative path first
-    video_path = video_id if os.path.exists(video_id) else os.path.join(UPLOADS_DIR, video_id)
+    video_path = video_id if os.path.exists(video_id) else os.path.join(UPLOADS_DIR, basename)
     
     if not os.path.exists(video_path):
         if "MOT17" in video_id:
-            video_path = f"Input video/{video_id}"
-        elif video_id == "test_video.mp4":
+            video_path = f"Input video/{basename}"
+        elif basename == "test_video.mp4":
             video_path = "test_video.mp4"
         else:
             # Check candidate directories
             for folder in ["demo_videos", "demo_data/videos", "adve_v2/demo_videos", "adve_v2/demo_data/videos"]:
-                candidate = os.path.join(folder, os.path.basename(video_id))
+                candidate = os.path.join(folder, basename)
                 if os.path.exists(candidate):
                     video_path = candidate
                     break
@@ -1118,7 +1235,6 @@ async def get_frame(video_id: str, frame_idx: int):
                 video_path = video_id
             
     if not os.path.exists(video_path):
-        basename = os.path.basename(video_id)
         fallback = os.path.join(UPLOADS_DIR, basename)
         if os.path.exists(fallback):
             video_path = fallback
@@ -1134,6 +1250,143 @@ async def get_frame(video_id: str, frame_idx: int):
         raise HTTPException(status_code=400, detail=f"Could not read frame {frame_idx}")
         
     return Response(content=buffer_bytes, media_type="image/jpeg")
+
+
+@app.post("/v1/sports/analytics")
+async def run_sports_analytics(
+    video_id: str,
+    player_filter: str = "All Players",
+    colormap: str = "Jet"
+):
+    sports_data_path = os.path.join(INDEX_DIR, f"{video_id}_sports_data.json")
+    if not os.path.exists(sports_data_path):
+        raise HTTPException(status_code=404, detail="Sports timeline data not found. Please index the video first.")
+        
+    with open(sports_data_path, "r", encoding="utf-8") as sf:
+        sports_data = json.load(sf)
+        
+    delta_timeline = sports_data.get("delta_timeline", [])
+    position_timeline = sports_data.get("position_timeline", [])
+    player_counts = sports_data.get("player_counts", [])
+    
+    # 1. Event Detection
+    detector = SportsEventDetector()
+    events = detector.detect_from_timeline(delta_timeline, player_counts)
+    
+    events_list = []
+    for e in events:
+        events_list.append({
+            "timestamp": e.timestamp,
+            "event_type": e.event_type,
+            "confidence": e.confidence,
+            "description": e.description,
+            "delta_mag": e.delta_mag
+        })
+        
+    # 2. Formation Tracking
+    tracker = FormationTracker()
+    formations = tracker.track_over_match(position_timeline, min_duration_sec=30.0)
+    
+    # If no duration-based formations found, get global
+    if not formations:
+        all_positions = []
+        for f in position_timeline:
+            all_positions.extend(f["positions"])
+        if all_positions:
+            global_snap = tracker.classify(all_positions)
+            formations = [{
+                "formation": global_snap.formation,
+                "start_time": 0.0,
+                "end_time": position_timeline[-1]["timestamp"] if position_timeline else 0.0,
+                "duration": position_timeline[-1]["timestamp"] if position_timeline else 0.0,
+                "confidence": global_snap.confidence
+            }]
+            
+    # 3. Heatmap Generation
+    heatmap_gen = PlayerHeatmap()
+    all_positions = []
+    for f in position_timeline:
+        positions = f["positions"]
+        if player_filter == "Left Side Attackers":
+            positions = [p for p in positions if p[0] < 0.5 and p[1] > 0.5]
+        elif player_filter == "Right Side Attackers":
+            positions = [p for p in positions if p[0] > 0.5 and p[1] > 0.5]
+        elif player_filter == "Defenders Only":
+            positions = [p for p in positions if p[1] < 0.4]
+        all_positions.extend(positions)
+        
+    cmap = cv2.COLORMAP_JET
+    if colormap == "Viridis":
+        cmap = cv2.COLORMAP_VIRIDIS
+    elif colormap == "Hot":
+        cmap = cv2.COLORMAP_HOT
+    elif colormap == "Inferno":
+        cmap = cv2.COLORMAP_INFERNO
+        
+    heatmap_img = heatmap_gen.generate(all_positions, player_name=player_filter, colormap=cmap)
+    
+    clean_vid_id = os.path.basename(video_id.replace("\\", "/"))
+    heatmap_out_path = os.path.join(INDEX_DIR, f"{clean_vid_id}_heatmap.jpg")
+    cv2.imwrite(heatmap_out_path, heatmap_img)
+    
+    # 4. Highlight Generation
+    basename = os.path.basename(video_id.replace("\\", "/"))
+    video_path = video_id if os.path.exists(video_id) else os.path.join(UPLOADS_DIR, basename)
+    if not os.path.exists(video_path):
+        for folder in ["demo_videos", "demo_data/videos", "adve_v2/demo_videos", "adve_v2/demo_data/videos"]:
+            candidate = os.path.join(folder, basename)
+            if os.path.exists(candidate):
+                video_path = candidate
+                break
+                
+    highlight_out_path = os.path.join(INDEX_DIR, f"{clean_vid_id}_highlights.mp4")
+    if os.path.exists(highlight_out_path):
+        try:
+            os.unlink(highlight_out_path)
+        except Exception:
+            pass
+            
+    generator = HighlightGenerator()
+    has_highlights = False
+    if os.path.exists(video_path):
+        try:
+            out = generator.generate(
+                video_path,
+                delta_timeline,
+                events,
+                output_path=highlight_out_path,
+                top_n=5
+            )
+            has_highlights = bool(out and os.path.exists(highlight_out_path))
+        except Exception as ex:
+            print(f"Failed to generate highlights in API: {ex}")
+            
+    return {
+        "status": "success",
+        "video_id": video_id,
+        "events": events_list,
+        "formations": formations,
+        "heatmap_url": f"/v1/sports/heatmap?video_id={video_id}",
+        "highlights_url": f"/v1/sports/highlights?video_id={video_id}" if has_highlights else None
+    }
+
+
+@app.get("/v1/sports/heatmap")
+async def get_sports_heatmap(video_id: str):
+    clean_vid_id = os.path.basename(video_id.replace("\\", "/"))
+    heatmap_path = os.path.join(INDEX_DIR, f"{clean_vid_id}_heatmap.jpg")
+    if not os.path.exists(heatmap_path):
+        raise HTTPException(status_code=404, detail="Heatmap not generated yet.")
+    return FileResponse(heatmap_path, media_type="image/jpeg")
+
+
+@app.get("/v1/sports/highlights")
+async def get_sports_highlights(video_id: str):
+    clean_vid_id = os.path.basename(video_id.replace("\\", "/"))
+    highlights_path = os.path.join(INDEX_DIR, f"{clean_vid_id}_highlights.mp4")
+    if not os.path.exists(highlights_path):
+        raise HTTPException(status_code=404, detail="Highlights reel not generated yet.")
+    return FileResponse(highlights_path, media_type="video/mp4")
 
 
 @app.get("/v1/health")

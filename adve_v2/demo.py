@@ -24,12 +24,25 @@ from adve.core.config import Config
 from adve.search.index import ADVESearchIndex, SearchResult, normalize_video_path
 from adve.core.audio_transcriber import AudioTranscriber
 
+from adve.sports.detector import SportsEventDetector
+from adve.sports.formation import FormationTracker
+from adve.sports.generator import HighlightGenerator
+from adve.sports.heatmap import PlayerHeatmap
+
 # Global state to keep track of active index, video, and search results
 active_video_path = None
 active_search_results = []
 index_dir = os.path.join(current_dir, "data", "demo_index")
 os.makedirs(index_dir, exist_ok=True)
 search_index = ADVESearchIndex(index_dir)
+
+# Sports Analytics Global State
+active_delta_timeline = []
+active_position_timeline = []
+active_player_counts = []
+active_sports_events = []
+active_formations = []
+active_highlight_path = None
 
 # YOLO-World dynamic object detection model (lazy-loaded on demand at search time)
 yolo_world_model = None
@@ -41,8 +54,7 @@ def get_yolo_world():
             print("[YOLO-World] Loading yolov8s-worldv2.pt model...")
             from ultralytics import YOLOWorld
             yolo_world_model = YOLOWorld("yolov8s-worldv2.pt")
-            import torch
-            device = "cuda" if torch.cuda.is_available() else "cpu"
+            device = Config().DEVICE
             yolo_world_model.to(device)
             print("[YOLO-World] Loaded successfully.")
         except Exception as e:
@@ -288,7 +300,11 @@ def index_video(video_path: str, sampling_rate: float = 5.0, use_adaptive_fps: b
     """Run ADVE pipeline to index anchor frames in the video."""
     global active_video_path
     global search_index
+    global active_delta_timeline, active_position_timeline, active_player_counts
     active_video_path = video_path
+    active_delta_timeline = []
+    active_position_timeline = []
+    active_player_counts = []
 
     progress(0.0, desc="Initializing ADVE pipeline...")
     config = Config()
@@ -379,8 +395,36 @@ def index_video(video_path: str, sampling_rate: float = 5.0, use_adaptive_fps: b
             obj_classes = [obj["class_name"] for obj in result.get("objects", [])]
             obj_metadata = ", ".join(set(obj_classes))
             
-            # Save all processed frames (both anchors and reconstructed deltas) to the search index
+            # --- Sports Analytics Processing ---
             timestamp = idx / fps
+            active_delta_timeline.append({
+                "timestamp": timestamp,
+                "magnitude": result.get("delta_magnitude", 0.0)
+            })
+
+            # Extract persons for heatmap/formations
+            persons = [obj for obj in result.get("objects", []) if obj["class_name"] == "person"]
+            frame_h, frame_w = frame.shape[:2]
+            coords = []
+            for p in persons:
+                bbox = p["bbox"] # [x1, y1, x2, y2]
+                x_center = (bbox[0] + bbox[2]) / 2.0
+                y_bottom = bbox[3]
+                coords.append((x_center / frame_w, y_bottom / frame_h))
+                
+            active_position_timeline.append({
+                "timestamp": timestamp,
+                "positions": coords
+            })
+            
+            active_player_counts.append({
+                "timestamp": timestamp,
+                "team1": len(persons),
+                "team2": 0
+            })
+            # -----------------------------------
+            
+            # Save all processed frames (both anchors and reconstructed deltas) to the search index
             search_index.add(
                 video_path,
                 "youtube_cam",
@@ -465,6 +509,98 @@ def index_video(video_path: str, sampling_rate: float = 5.0, use_adaptive_fps: b
         f"- Processing Time: {elapsed:.2f} seconds ({sampled_idx/elapsed:.1f} FPS)"
     )
     return summary
+
+
+def generate_sports_outputs(player_filter="All Players", colormap_name="Jet", progress=gr.Progress()):
+    global active_video_path, active_delta_timeline, active_position_timeline, active_player_counts
+    global active_sports_events, active_formations, active_highlight_path
+    
+    if not active_video_path or not os.path.exists(active_video_path):
+        return (
+            "### ❌ No Video Indexed\nPlease upload and index a match video first.",
+            "### ❌ No Video Indexed\nPlease upload and index a match video first.",
+            None,
+            None
+        )
+        
+    progress(0.1, desc="Analyzing match events...")
+    # 1. Event detection
+    detector = SportsEventDetector(global_audio_indexer.segments if (global_audio_indexer and hasattr(global_audio_indexer, 'segments')) else [])
+    active_sports_events = detector.detect_from_timeline(active_delta_timeline, active_player_counts)
+    
+    # Format event markdown table
+    events_md = "### 📋 Match Event Log\n\n| Time | Event | Confidence | Description |\n| --- | --- | --- | --- |\n"
+    if active_sports_events:
+        for e in active_sports_events:
+            emoji = "⚽" if e.event_type == "GOAL" else "⚠️" if e.event_type == "FOUL" else "🔄" if e.event_type == "SUBSTITUTION" else "🚨" if e.event_type == "RED_CARD" else "⚙️"
+            events_md += f"| {e.timestamp:.1f}s | {emoji} {e.event_type} | {e.confidence*100:.1f}% | {e.description} |\n"
+    else:
+        events_md += "| -- | No events detected | -- | -- |\n"
+        
+    progress(0.4, desc="Tracking formations...")
+    # 2. Formation tracking
+    tracker = FormationTracker()
+    active_formations = tracker.track_over_match(active_position_timeline, min_duration_sec=30.0)
+    
+    formations_md = "### 📋 Formation Timeline\n\n| Time | Formation | Duration |\n| --- | --- | --- |\n"
+    if active_formations:
+        for f in active_formations:
+            start_fmt = f"{int(f['start_time']//60):02d}:{int(f['start_time']%60):02d}"
+            end_fmt = f"{int(f['end_time']//60):02d}:{int(f['end_time']%60):02d}"
+            formations_md += f"| {start_fmt} - {end_fmt} | {f['formation']} | {f['duration']:.1f}s |\n"
+    else:
+        # If no duration-based changes, classify global positions
+        all_positions = []
+        for f in active_position_timeline:
+            all_positions.extend(f["positions"])
+        if all_positions:
+            global_snapshot = tracker.classify(all_positions)
+            formations_md += f"| Global Match | {global_snapshot.formation} (Confidence: {global_snapshot.confidence*100:.1f}%) | -- |\n"
+        else:
+            formations_md += "| -- | No players detected | -- |\n"
+
+    progress(0.7, desc="Generating player heatmap...")
+    # 3. Player Heatmap
+    heatmap_gen = PlayerHeatmap()
+    all_positions = []
+    
+    for f in active_position_timeline:
+        # Filter positions based on input filter
+        positions = f["positions"]
+        if player_filter == "Left Side Attackers":
+            positions = [p for p in positions if p[0] < 0.5 and p[1] > 0.5]
+        elif player_filter == "Right Side Attackers":
+            positions = [p for p in positions if p[0] > 0.5 and p[1] > 0.5]
+        elif player_filter == "Defenders Only":
+            positions = [p for p in positions if p[1] < 0.4]
+        all_positions.extend(positions)
+        
+    cmap = cv2.COLORMAP_JET
+    if colormap_name == "Viridis":
+        cmap = cv2.COLORMAP_VIRIDIS
+    elif colormap_name == "Hot":
+        cmap = cv2.COLORMAP_HOT
+    elif colormap_name == "Inferno":
+        cmap = cv2.COLORMAP_INFERNO
+        
+    heatmap_img = heatmap_gen.generate(all_positions, player_name=player_filter, colormap=cmap)
+    
+    os.makedirs("clips", exist_ok=True)
+    heatmap_out_path = "clips/heatmap_match.jpg"
+    cv2.imwrite(heatmap_out_path, heatmap_img)
+    
+    progress(0.85, desc="Extracting highlights...")
+    # 4. Highlight Reel
+    highlight_out = "clips/highlights_match.mp4"
+    gen = HighlightGenerator()
+    try:
+        active_highlight_path = gen.generate(active_video_path, active_delta_timeline, active_sports_events, output_path=highlight_out, top_n=5)
+    except Exception as ex:
+        print(f"Highlight generation failed: {ex}")
+        active_highlight_path = None
+        
+    progress(1.0, desc="Sports analytics complete!")
+    return events_md, formations_md, heatmap_out_path, active_highlight_path
 
 
 def handle_youtube_index(url: str, sampling_rate: float, use_adaptive_fps: bool, index_audio: bool, index_ocr: bool, progress=gr.Progress()) -> str:
@@ -1693,129 +1829,173 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
       </div>
     </header>
     """)
+    with gr.Tabs(elem_classes="main-portal-tabs"):
+        with gr.TabItem("General Video RAG Portal"):
+            # ── Hero Section ──
+            gr.HTML("""
+            <section class="hero-section">
+              <div class="hero-inner">
+                <span class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>Up to 90% fewer vision-network calls</span>
+                <h1>ADVE — <span class="accent">Semantic Video Search</span> &amp; Chatbot</h1>
+                <p>Anchor-Delta Video Embedding (ADVE) reduces neural vision network calls by up to 90% via motion-adaptive keyframe processing for semantic scene search and video Q&amp;A.</p>
+              </div>
+              <div class="hero-deco">
+                <div class="hero-dots"></div>
+                <div class="float-card search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+                <div class="float-card chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg></div>
+                <div class="float-card play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
+              </div>
+            </section>
+            """)
 
-    # ── Hero Section ──
-    gr.HTML("""
-    <section class="hero-section">
-      <div class="hero-inner">
-        <span class="eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>Up to 90% fewer vision-network calls</span>
-        <h1>ADVE — <span class="accent">Semantic Video Search</span> &amp; Chatbot</h1>
-        <p>Anchor-Delta Video Embedding (ADVE) reduces neural vision network calls by up to 90% via motion-adaptive keyframe processing for semantic scene search and video Q&amp;A.</p>
-      </div>
-      <div class="hero-deco">
-        <div class="hero-dots"></div>
-        <div class="float-card search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
-        <div class="float-card chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg></div>
-        <div class="float-card play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
-      </div>
-    </section>
-    """)
+            with gr.Row():
+                # ── COLUMN 1: Ingestion & Stats (scale=4) ──
+                with gr.Column(scale=4):
+                    # Ingestion Card
+                    with gr.Column(elem_classes="panel-card"):
+                        gr.HTML("""<div class='pane-title'><span class='step-num'>1</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><path d='M20 17.58A5 5 0 0018 8h-1.26A8 8 0 104 16.25'/><path d='M12 12v9'/><path d='M9 18l3 3 3-3'/></svg>Video Ingestion & Indexing</div>""")
+                        with gr.Tabs(elem_classes="tabs"):
+                            with gr.TabItem("YouTube URL"):
+                                yt_url = gr.Textbox(show_label=False, placeholder="https://www.youtube.com/watch?v=...", container=False)
+                                with gr.Row(elem_classes="option-card-row"):
+                                    yt_adaptive = gr.Checkbox(label="Adaptive FPS", value=True, elem_classes=["checkbox-card", "chk-adaptive"], container=False)
+                                    yt_index_audio = gr.Checkbox(label="Whisper", value=False, elem_classes=["checkbox-card", "chk-whisper"], container=False)
+                                    yt_index_ocr = gr.Checkbox(label="EasyOCR", value=False, elem_classes=["checkbox-card", "chk-easyocr"], container=False)
+                                with gr.Accordion("Advanced Ingestion Settings", open=False):
+                                    yt_fps = gr.Slider(label="Sampling Rate (FPS)", minimum=0.1, maximum=10.0, value=2.0, step=0.1)
+                                yt_index_btn = gr.Button("🚀 Index Video", variant="primary", elem_classes="primary-btn")
+                                yt_status = gr.Textbox(label="Indexing Output Status", interactive=False, placeholder="Waiting to index...", elem_classes="status-box")
+                                
+                            with gr.TabItem("Local Upload"):
+                                local_file = gr.File(label="Upload Video File", file_types=["video"])
+                                with gr.Row(elem_classes="option-card-row"):
+                                    local_adaptive = gr.Checkbox(label="Adaptive FPS", value=True, elem_classes=["checkbox-card", "chk-adaptive"], container=False)
+                                    local_index_audio = gr.Checkbox(label="Whisper", value=False, elem_classes=["checkbox-card", "chk-whisper"], container=False)
+                                    local_index_ocr = gr.Checkbox(label="EasyOCR", value=False, elem_classes=["checkbox-card", "chk-easyocr"], container=False)
+                                with gr.Accordion("Advanced Ingestion Settings", open=False):
+                                    local_fps = gr.Slider(label="Sampling Rate (FPS)", minimum=0.1, maximum=10.0, value=2.0, step=0.1)
+                                local_index_btn = gr.Button("🚀 Index Video", variant="primary", elem_classes="primary-btn")
+                                local_status = gr.Textbox(label="Indexing Output Status", interactive=False, placeholder="Waiting to index...", elem_classes="status-box")
 
-    with gr.Row():
-        # ── COLUMN 1: Ingestion & Stats (scale=4) ──
-        with gr.Column(scale=4):
-            # Ingestion Card
-            with gr.Column(elem_classes="panel-card"):
-                gr.HTML("""<div class='pane-title'><span class='step-num'>1</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><path d='M20 17.58A5 5 0 0018 8h-1.26A8 8 0 104 16.25'/><path d='M12 12v9'/><path d='M9 18l3 3 3-3'/></svg>Video Ingestion & Indexing</div>""")
-                with gr.Tabs(elem_classes="tabs"):
-                    with gr.TabItem("YouTube URL"):
-                        yt_url = gr.Textbox(show_label=False, placeholder="https://www.youtube.com/watch?v=...", container=False)
-                        with gr.Row(elem_classes="option-card-row"):
-                            yt_adaptive = gr.Checkbox(label="Adaptive FPS", value=True, elem_classes=["checkbox-card", "chk-adaptive"], container=False)
-                            yt_index_audio = gr.Checkbox(label="Whisper", value=False, elem_classes=["checkbox-card", "chk-whisper"], container=False)
-                            yt_index_ocr = gr.Checkbox(label="EasyOCR", value=False, elem_classes=["checkbox-card", "chk-easyocr"], container=False)
-                        with gr.Accordion("Advanced Ingestion Settings", open=False):
-                            yt_fps = gr.Slider(label="Sampling Rate (FPS)", minimum=0.1, maximum=10.0, value=2.0, step=0.1)
-                        yt_index_btn = gr.Button("🚀 Index Video", variant="primary", elem_classes="primary-btn")
-                        yt_status = gr.Textbox(label="Indexing Output Status", interactive=False, placeholder="Waiting to index...", elem_classes="status-box")
+                    # Stats Card
+                    with gr.Column(elem_classes="panel-card"):
+                        gr.HTML("""<div class='pane-title'><span class='step-num'>5</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><path d='M12 20h9M3 20h4M3 12h18M3 4h18'/></svg>Deployed Index Statistics</div>""")
+                        stats_html = gr.HTML(get_dynamic_stats())
                         
-                    with gr.TabItem("Local Upload"):
-                        local_file = gr.File(label="Upload Video File", file_types=["video"])
-                        with gr.Row(elem_classes="option-card-row"):
-                            local_adaptive = gr.Checkbox(label="Adaptive FPS", value=True, elem_classes=["checkbox-card", "chk-adaptive"], container=False)
-                            local_index_audio = gr.Checkbox(label="Whisper", value=False, elem_classes=["checkbox-card", "chk-whisper"], container=False)
-                            local_index_ocr = gr.Checkbox(label="EasyOCR", value=False, elem_classes=["checkbox-card", "chk-easyocr"], container=False)
-                        with gr.Accordion("Advanced Ingestion Settings", open=False):
-                            local_fps = gr.Slider(label="Sampling Rate (FPS)", minimum=0.1, maximum=10.0, value=2.0, step=0.1)
-                        local_index_btn = gr.Button("🚀 Index Video", variant="primary", elem_classes="primary-btn")
-                        local_status = gr.Textbox(label="Indexing Output Status", interactive=False, placeholder="Waiting to index...", elem_classes="status-box")
+                        gr.HTML("""
+                        <div class="validation-box">
+                            <p class="title">Validation Reference</p>
+                            <div class="validation-row"><span>Synthetic:</span><b>96.7% savings · 0.948 cosine sim</b></div>
+                            <div class="validation-row"><span>MOT17:</span><b>60.3% savings · 0.992 cosine sim</b></div>
+                            <div class="validation-row"><span>GPU VRAM:</span><b>330 MB (vs 950 MB baseline)</b></div>
+                        </div>
+                        """)
+                        
+                        gr.HTML("""
+                        <div class="quick-guide">
+                            <div class="title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#f5a623;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 00-4 12.7c.6.5 1 1.2 1 2.3h6c0-1.1.4-1.8 1-2.3A7 7 0 0012 2z"/></svg>
+                                Quick Guide
+                            </div>
+                            <div class="qg-item"><span class="qg-num">1</span>Upload or paste a YouTube URL and index the video.</div>
+                            <div class="qg-item"><span class="qg-num">2</span>Search by text or ask a question in the chatbot.</div>
+                        </div>
+                        """)
 
-            # Stats Card
-            with gr.Column(elem_classes="panel-card"):
-                gr.HTML("""<div class='pane-title'><span class='step-num'>5</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><path d='M12 20h9M3 20h4M3 12h18M3 4h18'/></svg>Deployed Index Statistics</div>""")
-                stats_html = gr.HTML(get_dynamic_stats())
-                
-                gr.HTML("""
-                <div class="validation-box">
-                    <p class="title">Validation Reference</p>
-                    <div class="validation-row"><span>Synthetic:</span><b>96.7% savings · 0.948 cosine sim</b></div>
-                    <div class="validation-row"><span>MOT17:</span><b>60.3% savings · 0.992 cosine sim</b></div>
-                    <div class="validation-row"><span>GPU VRAM:</span><b>330 MB (vs 950 MB baseline)</b></div>
-                </div>
-                """)
-                
-                gr.HTML("""
-                <div class="quick-guide">
-                    <div class="title">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#f5a623;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 00-4 12.7c.6.5 1 1.2 1 2.3h6c0-1.1.4-1.8 1-2.3A7 7 0 0012 2z"/></svg>
-                        Quick Guide
-                    </div>
-                    <div class="qg-item"><span class="qg-num">1</span>Upload or paste a YouTube URL and index the video.</div>
-                    <div class="qg-item"><span class="qg-num">2</span>Search by text or ask a question in the chatbot.</div>
-                </div>
-                """)
+                # ── COLUMN 2: Search, Results & Chatbot (scale=6) ──
+                with gr.Column(scale=6):
+                    # Search Card
+                    with gr.Column(elem_classes="panel-card"):
+                        gr.HTML("""<div class='pane-title'><span class='step-num'>2</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>Semantic Scene Search</div>""")
+                        gr.HTML("<p style='font-size: 13px; color: #71717a; margin-top: -8px; margin-bottom: 12px;'>Describe the scene you're looking for</p>")
+                        with gr.Row():
+                            search_query = gr.Textbox(placeholder="E.g., a person typing on a laptop in a cafe", container=False, scale=4)
+                            search_btn = gr.Button("🔍 Search", variant="primary", elem_classes="primary-btn", scale=1)
+                        
+                        # Hidden settings accordion to keep UI clean
+                        with gr.Accordion("Search Settings", open=False):
+                            clip_duration = gr.Slider(label="Clip Duration (seconds)", minimum=3.0, maximum=60.0, value=10.0, step=1.0)
+                            min_similarity = gr.Slider(label="Min Similarity Gate", minimum=0.0, maximum=1.0, value=0.0, step=0.05)
+                            use_dynamic_duration = gr.Checkbox(label="Auto-Detect Scene Duration", value=False)
+                            anchor_only = gr.Checkbox(label="Search Anchor Frames Only", value=False)
+                            
+                        search_metrics = gr.Markdown("No query submitted yet.")
 
-        # ── COLUMN 2: Search, Results & Chatbot (scale=6) ──
-        with gr.Column(scale=6):
-            # Search Card
-            with gr.Column(elem_classes="panel-card"):
-                gr.HTML("""<div class='pane-title'><span class='step-num'>2</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>Semantic Scene Search</div>""")
-                gr.HTML("<p style='font-size: 13px; color: #71717a; margin-top: -8px; margin-bottom: 12px;'>Describe the scene you're looking for</p>")
-                with gr.Row():
-                    search_query = gr.Textbox(placeholder="E.g., a person typing on a laptop in a cafe", container=False, scale=4)
-                    search_btn = gr.Button("🔍 Search", variant="primary", elem_classes="primary-btn", scale=1)
-                
-                # Hidden settings accordion to keep UI clean
-                with gr.Accordion("Search Settings", open=False):
-                    clip_duration = gr.Slider(label="Clip Duration (seconds)", minimum=3.0, maximum=60.0, value=10.0, step=1.0)
-                    min_similarity = gr.Slider(label="Min Similarity Gate", minimum=0.0, maximum=1.0, value=0.0, step=0.05)
-                    use_dynamic_duration = gr.Checkbox(label="Auto-Detect Scene Duration", value=False)
-                    anchor_only = gr.Checkbox(label="Search Anchor Frames Only", value=False)
+                    # Match Results Card
+                    with gr.Column(elem_classes="panel-card"):
+                        gr.HTML("""<div class='pane-title'><span class='step-num'>3</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>Search & Match Results</div>""")
+                        gr.HTML("<p style='font-size: 13px; color: #71717a; margin-top: -8px; margin-bottom: 16px;'>Top matching keyframes from your indexed videos.</p>")
+                        
+                        with gr.Row():
+                            with gr.Column(elem_classes="match-card", scale=1):
+                                m1_img = gr.Image(show_label=False, interactive=False, height=180)
+                                m1_meta = gr.HTML(empty_meta)
+                            with gr.Column(elem_classes="match-card", scale=1):
+                                m2_img = gr.Image(show_label=False, interactive=False, height=180)
+                                m2_meta = gr.HTML(empty_meta)
+                            with gr.Column(elem_classes="match-card", scale=1):
+                                m3_img = gr.Image(show_label=False, interactive=False, height=180)
+                                m3_meta = gr.HTML(empty_meta)
+                                
+                        # Video playback players (shown dynamically underneath when match is selected/clicked)
+                        with gr.Accordion("Clips Playback", open=False):
+                            clip_player_1 = gr.Video(label="Match 1 Clip", visible=False)
+                            clip_player_2 = gr.Video(label="Match 2 Clip", visible=False)
+                            clip_player_3 = gr.Video(label="Match 3 Clip", visible=False)
+
+                    # Chatbot Card
+                    with gr.Column(elem_classes="panel-card"):
+                        gr.HTML("""<div class='pane-title'><span class='step-num'>4</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><path d='M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z'/></svg>Conversational Video Chatbot</div>""")
+                        chatbot = gr.Chatbot(show_label=False, height=220)
+                        with gr.Row():
+                            chat_input = gr.Textbox(placeholder="Ask a question about the video...", container=False, scale=4)
+                            chat_submit = gr.Button("✈️ Send", variant="primary", elem_classes="primary-btn", scale=1)
+                        with gr.Row():
+                            gr.HTML("<span style='font-size: 12px; color: #52525b; padding-top: 6px;'>⚡ Powered by vision-language models</span>")
+                            chat_clear_btn = gr.Button("🗑️ Clear Chat", elem_classes="secondary-btn", size="sm", scale=1)
+
+        with gr.TabItem("Sports Analytics Portal"):
+            gr.HTML("""
+            <div style='text-align: center; margin-top: 20px; margin-bottom: 28px;'>
+                <h1 style='font-size: 32px; margin-bottom: 8px; font-weight: 800; background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>⚽ ADVE Sports Analytics Dashboard</h1>
+                <p style='color: #a1a1aa; font-size: 15px; max-width: 600px; margin: 0 auto;'>Automated tactical match intelligence: event logs, formation changes, player heatmaps, and highlight reels powered by geometric scene metrics.</p>
+            </div>
+            """)
+            
+            with gr.Row():
+                # Heatmap & Tactical Controls Panel
+                with gr.Column(scale=4, elem_classes="panel-card"):
+                    gr.HTML("<div class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;margin-right:6px;'><path d='M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z'/></svg>Heatmap & Tactical Controls</div>")
+                    sports_filter = gr.Dropdown(
+                        label="Heatmap Focus Filter",
+                        choices=["All Players", "Left Side Attackers", "Right Side Attackers", "Defenders Only"],
+                        value="All Players"
+                    )
+                    sports_cmap = gr.Dropdown(
+                        label="Heatmap Colormap Style",
+                        choices=["Jet", "Viridis", "Hot", "Inferno"],
+                        value="Jet"
+                    )
+                    sports_run_btn = gr.Button("📊 Run Sports Analytics", variant="primary", elem_classes="primary-btn")
                     
-                search_metrics = gr.Markdown("No query submitted yet.")
-
-            # Match Results Card
-            with gr.Column(elem_classes="panel-card"):
-                gr.HTML("""<div class='pane-title'><span class='step-num'>3</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>Search & Match Results</div>""")
-                gr.HTML("<p style='font-size: 13px; color: #71717a; margin-top: -8px; margin-bottom: 16px;'>Top matching keyframes from your indexed videos.</p>")
-                
-                with gr.Row():
-                    with gr.Column(elem_classes="match-card", scale=1):
-                        m1_img = gr.Image(show_label=False, interactive=False, height=180)
-                        m1_meta = gr.HTML(empty_meta)
-                    with gr.Column(elem_classes="match-card", scale=1):
-                        m2_img = gr.Image(show_label=False, interactive=False, height=180)
-                        m2_meta = gr.HTML(empty_meta)
-                    with gr.Column(elem_classes="match-card", scale=1):
-                        m3_img = gr.Image(show_label=False, interactive=False, height=180)
-                        m3_meta = gr.HTML(empty_meta)
-                        
-                # Video playback players (shown dynamically underneath when match is selected/clicked)
-                with gr.Accordion("Clips Playback", open=False):
-                    clip_player_1 = gr.Video(label="Match 1 Clip", visible=False)
-                    clip_player_2 = gr.Video(label="Match 2 Clip", visible=False)
-                    clip_player_3 = gr.Video(label="Match 3 Clip", visible=False)
-
-            # Chatbot Card
-            with gr.Column(elem_classes="panel-card"):
-                gr.HTML("""<div class='pane-title'><span class='step-num'>4</span><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;'><path d='M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z'/></svg>Conversational Video Chatbot</div>""")
-                chatbot = gr.Chatbot(show_label=False, height=220)
-                with gr.Row():
-                    chat_input = gr.Textbox(placeholder="Ask a question about the video...", container=False, scale=4)
-                    chat_submit = gr.Button("✈️ Send", variant="primary", elem_classes="primary-btn", scale=1)
-                with gr.Row():
-                    gr.HTML("<span style='font-size: 12px; color: #52525b; padding-top: 6px;'>⚡ Powered by vision-language models</span>")
-                    chat_clear_btn = gr.Button("🗑️ Clear Chat", elem_classes="secondary-btn", size="sm", scale=1)
+                # Interactive Formations & Events Panel
+                with gr.Column(scale=6, elem_classes="panel-card"):
+                    gr.HTML("<div class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;margin-right:6px;'><rect x='2' y='2' width='20' height='20' rx='2' ry='2'/><line x1='7' y1='2' x2='7' y2='22'/><line x1='17' y1='2' x2='17' y2='22'/><line x1='2' y1='12' x2='22' y2='12'/><line x1='2' y1='7' x2='22' y2='7'/><line x1='2' y1='17' x2='22' y2='17'/></svg>Tactical Insights & Events</div>")
+                    with gr.Tabs():
+                        with gr.TabItem("Tactical Formations"):
+                            sports_formations_out = gr.Markdown("No analysis results generated yet. Please click the button to analyze.")
+                        with gr.TabItem("Detected Events"):
+                            sports_events_out = gr.Markdown("No analysis results generated yet. Please click the button to analyze.")
+            
+            with gr.Row():
+                # Heatmap Display
+                with gr.Column(scale=5, elem_classes="panel-card"):
+                    gr.HTML("<div class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;margin-right:6px;'><path d='M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z'/></svg>Heatmap Output Visualization</div>")
+                    sports_heatmap_out = gr.Image(label="Tactical Heatmap", interactive=False)
+                # Video Highlights Display
+                with gr.Column(scale=5, elem_classes="panel-card"):
+                    gr.HTML("<div class='pane-title'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' style='display:inline;margin-right:6px;'><rect x='2' y='2' width='20' height='20' rx='2.18' ry='2.18'/><path d='M10 9l5 3-5 3V9z'/></svg>Auto-Generated Highlights</div>")
+                    sports_highlight_out = gr.Video(label="Highlights Reel", interactive=False)
 
     # ── Footer ──
     gr.HTML("""
@@ -1893,6 +2073,12 @@ with gr.Blocks(title="ADVE Engine Portal", css=custom_css) as demo:
         fn=clear_chat,
         inputs=[],
         outputs=[chatbot, chat_input, m1_img, m1_meta, m2_img, m2_meta, m3_img, m3_meta]
+    )
+    
+    sports_run_btn.click(
+        fn=generate_sports_outputs,
+        inputs=[sports_filter, sports_cmap],
+        outputs=[sports_events_out, sports_formations_out, sports_heatmap_out, sports_highlight_out]
     )
 
 if __name__ == "__main__":

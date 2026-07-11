@@ -25,8 +25,8 @@ class AudioTranscriber:
         if self._model is None and self.whisper_available:
             try:
                 import whisper
-                import torch
-                device = "cuda" if torch.cuda.is_available() else "cpu"
+                from adve.core.config import Config
+                device = Config().DEVICE
                 print(f"[AudioTranscriber] Loading Whisper model '{self.model_name}' on {device}...")
                 self._model = whisper.load_model(self.model_name, device=device)
                 print("[AudioTranscriber] Whisper model loaded successfully.")

@@ -15,8 +15,7 @@ class Config:
     # --- Validation ---
     SUCCESS_THRESHOLD: float = 0.85       # min cosine similarity to pass
 
-    # --- Hardware ---
-    DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
+    DEVICE: str = "cpu"
 
     # --- I/O ---
     OUTPUT_DIR: str = "outputs"

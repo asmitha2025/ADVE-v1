@@ -543,6 +543,8 @@
   footer.bottom i { font-size: 13px; }
 
   :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+  .rotate { animation: spin 1.5s linear infinite; display: inline-block; }
 </style>
 </head>
 <body>
@@ -611,6 +613,18 @@
               <i class="ti ti-upload" aria-hidden="true"></i>
               <p>Drag &amp; drop a video, or click to browse</p>
               <p class="small">MP4, WEBM up to 2GB</p>
+            </div>
+          </div>
+
+          <div class="field-group" style="margin-top: 15px; margin-bottom: 15px;">
+            <label class="field-label" style="display:block;margin-bottom:6px;">Indexing Speed / Quality</label>
+            <div style="position: relative; display: flex; align-items: center;">
+              <i class="ti ti-activity" style="position: absolute; left: 14px; color: var(--text-muted); font-size: 1.1rem; pointer-events: none;" aria-hidden="true"></i>
+              <select id="sel-speed-preset" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px 10px 40px; width: 100%; outline: none; font-size: 0.9rem; cursor: pointer; height: 42px;">
+                <option value="fast">⚡ Fast / Draft (0.5 FPS - 12x speedup)</option>
+                <option value="standard" selected>⚖️ Standard (2.0 FPS - Balanced)</option>
+                <option value="high">🔍 High Quality (4.0 FPS - Maximum Detail)</option>
+              </select>
             </div>
           </div>
 
@@ -798,15 +812,120 @@
 
   <!-- ================= VIEW: ANALYTICS ================= -->
   <div class="page-view" id="view-analytics">
-    <div class="card">
-      <div class="card-head">
-        <h3><i class="ti ti-chart-bar" aria-hidden="true"></i>Encoder Savings by Video Type</h3>
+    <!-- Warning banner if no videos indexed -->
+    <div id="no-videos-warning" style="display:none; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.15); padding:16px; border-radius:var(--radius-md); margin-bottom:20px; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; width:100%;">
+      <div style="display:flex; align-items:center; gap:12px; color:var(--text);">
+        <i class="ti ti-alert-triangle" style="font-size:24px; color:#ef4444;"></i>
+        <div>
+          <h4 style="margin:0; font-size:14px; font-weight:700;">No indexed videos found</h4>
+          <p style="margin:2px 0 0 0; font-size:13px; color:var(--muted);">You must upload and index a match video on the Overview page before you can run tactical sports analysis.</p>
+        </div>
       </div>
-      <div class="bar-wrap"><div class="bar-label"><span>CCTV / Surveillance (static)</span><span>94.2%</span></div><div class="bar-track"><div class="bar-fill" style="width:94.2%;"></div></div></div>
-      <div class="bar-wrap"><div class="bar-label"><span>Lectures / Presentations (slides)</span><span>91.5%</span></div><div class="bar-track"><div class="bar-fill" style="width:91.5%;"></div></div></div>
-      <div class="bar-wrap"><div class="bar-label"><span>Meetings / Webinars (faces)</span><span>88.0%</span></div><div class="bar-track"><div class="bar-fill" style="width:88%;"></div></div></div>
-      <div class="bar-wrap"><div class="bar-label"><span>News Broadcasts (transitions)</span><span>76.3%</span></div><div class="bar-track"><div class="bar-fill" style="width:76.3%;"></div></div></div>
-      <div class="bar-wrap"><div class="bar-label"><span>Sports / Action Film (motion)</span><span>52.1%</span></div><div class="bar-track"><div class="bar-fill" style="width:52.1%;"></div></div></div>
+      <button onclick="switchToOverview()" class="btn" style="background:#ef4444; color:#fff; border:none; padding:8px 16px; border-radius:var(--radius-sm); font-size:13px; font-weight:600; cursor:pointer;">🚀 Go to Ingest Video</button>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+      <div>
+        <h2 style="margin:0; font-family:'Space Grotesk',sans-serif; font-size:24px; background:linear-gradient(135deg,#a855f7 0%,#3b82f6 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">⚽ Sports &amp; Tactical Analytics Dashboard</h2>
+        <p style="margin:4px 0 0 0; color:var(--muted); font-size:14px;">Automated match events, tactical formations, player heatmaps, and highlight extraction.</p>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <label for="sports-video-select" style="font-size:13px; font-weight:600; color:var(--muted);">Select Match:</label>
+          <select id="sports-video-select" style="padding:8px 12px; border-radius:var(--radius-sm); background:var(--bg-soft); border:1px solid var(--border); color:var(--text); font-size:13px; min-width:180px;">
+            <option value="">-- No Indexed Videos --</option>
+          </select>
+          <button id="sports-run-btn" class="btn" style="background:var(--blue); color:#fff; border:none; padding:8px 16px; border-radius:var(--radius-sm); font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px; cursor:pointer;"><i class="ti ti-activity"></i> Run Analysis</button>
+        </div>
+        <p style="margin:4px 0 0 0; font-size:11px; color:var(--muted); text-align:right; width:100%;">
+          <i class="ti ti-info-circle"></i> Need to index a new match? 
+          <a href="#" onclick="switchToOverview(); return false;" style="color:var(--blue); text-decoration:none; font-weight:600;">Go to Overview Upload</a>
+        </p>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:20px; margin-bottom:20px;">
+      <!-- Controls & Heatmap -->
+      <div class="card" style="display:flex; flex-direction:column; gap:16px;">
+        <div class="card-head">
+          <h3><i class="ti ti-current-location"></i> Heatmap Controls &amp; Output</h3>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <div style="flex:1;">
+            <label class="field-label" style="display:block;margin-bottom:6px;">Filter Focus</label>
+            <select id="sports-filter" style="width:100%; padding:8px; border-radius:var(--radius-sm); background:var(--bg-soft); border:1px solid var(--border); color:var(--text); font-size:13px;">
+              <option value="All Players">All Players</option>
+              <option value="Left Side Attackers">Left Side Attackers</option>
+              <option value="Right Side Attackers">Right Side Attackers</option>
+              <option value="Defenders Only">Defenders Only</option>
+            </select>
+          </div>
+          <div style="flex:1;">
+            <label class="field-label" style="display:block;margin-bottom:6px;">Colormap Style</label>
+            <select id="sports-cmap" style="width:100%; padding:8px; border-radius:var(--radius-sm); background:var(--bg-soft); border:1px solid var(--border); color:var(--text); font-size:13px;">
+              <option value="Jet">Jet (Classic)</option>
+              <option value="Viridis">Viridis (Modern)</option>
+              <option value="Hot">Hot (Thermal)</option>
+              <option value="Inferno">Inferno (Neon)</option>
+            </select>
+          </div>
+        </div>
+        <button id="sports-update-heatmap-btn" class="btn" style="width:100%; padding:8px; font-size:13px; font-weight:600; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:var(--radius-sm); cursor:pointer;"><i class="ti ti-refresh"></i> Update Heatmap</button>
+        
+        <div style="border-radius:var(--radius-md); overflow:hidden; border:1px solid var(--border); background:#0f172a; display:flex; justify-content:center; align-items:center; aspect-ratio:800/520; position:relative; width:100%;">
+          <img id="sports-heatmap-img" src="" alt="Heatmap Output" style="width:100%; height:auto; display:none; border-radius:var(--radius-md);">
+          <div id="sports-heatmap-placeholder" style="color:#64748b; text-align:center; font-size:13px; padding:20px;">
+            <i class="ti ti-map-pin" style="font-size:32px; display:block; margin-bottom:8px; color:var(--muted-soft);"></i>
+            Run analysis to generate the tactical heatmap
+          </div>
+        </div>
+      </div>
+
+      <!-- Formations & Events -->
+      <div class="card" style="display:flex; flex-direction:column; gap:16px;">
+        <div class="card-head">
+          <h3><i class="ti ti-brain"></i> Tactical Insights &amp; Timelines</h3>
+        </div>
+        
+        <div class="tabs" style="margin-bottom:0;">
+          <button class="tab active" id="sports-tab-formations">Tactical Formations</button>
+          <button class="tab" id="sports-tab-events">Match Events</button>
+        </div>
+
+        <div id="sports-formations-panel" class="tab-panel active" style="max-height:400px; overflow-y:auto; width:100%;">
+          <div id="sports-formations-content">
+            <div style="color:var(--muted); text-align:center; padding:40px 20px;">
+              <i class="ti ti-layout-grid" style="font-size:32px; display:block; margin-bottom:8px; color:var(--muted-soft);"></i>
+              No formation data analyzed yet.
+            </div>
+          </div>
+        </div>
+
+        <div id="sports-events-panel" class="tab-panel" style="max-height:400px; overflow-y:auto; display:none; width:100%;">
+          <div id="sports-events-content">
+            <div style="color:var(--muted); text-align:center; padding:40px 20px;">
+              <i class="ti ti-bell-ringing" style="font-size:32px; display:block; margin-bottom:8px; color:var(--muted-soft);"></i>
+              No match events detected yet.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Highlights Video -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-head">
+        <h3><i class="ti ti-movie"></i> Auto-Generated Highlight Reels</h3>
+      </div>
+      <p class="card-sub">Extracts top Delta spikes and stiches them automatically into a custom highlight compilation.</p>
+      
+      <div style="display:flex; justify-content:center; align-items:center; background:#000; border-radius:var(--radius-md); overflow:hidden; border:1px solid var(--border); width:100%; aspect-ratio:16/9; max-width:800px; margin: 0 auto; position:relative;">
+        <video id="sports-highlights-video" controls style="width:100%; height:100%; display:none; object-fit:contain;"></video>
+        <div id="sports-highlights-placeholder" style="color:#64748b; text-align:center; padding:40px;">
+          <i class="ti ti-player-play" style="font-size:48px; display:block; margin-bottom:12px; color:var(--muted-soft);"></i>
+          Index video and run analysis to compile highlights
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1047,6 +1166,7 @@
 
       // Update camera selector options in search card
       updateCameraFilters(videos);
+      updateSportsVideoSelect(videos);
 
       // Render Active Tasks progress bars
       const activeTasks = data.active_tasks || {};
@@ -1158,6 +1278,8 @@
     document.getElementById('statusSpinner').style.display = 'inline-block';
     statusText.textContent = 'Submitting YouTube URL...';
 
+    const speedPreset = document.getElementById('sel-speed-preset').value;
+
     try {
       const res = await fetch(`${API_BASE}/v1/index/youtube`, {
         method: 'POST',
@@ -1167,7 +1289,8 @@
           tiled_encoding: false,
           ocr: ocr,
           whisper: whisper,
-          adaptive_fps: adaptive
+          adaptive_fps: adaptive,
+          speed_preset: speedPreset
         })
       });
 
@@ -1210,11 +1333,13 @@
     progressTrack.classList.add('show');
     progressFill.style.width = '0%';
 
+    const speedPreset = document.getElementById('sel-speed-preset').value;
+
     const formData = new FormData();
     formData.append("file", file);
 
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${API_BASE}/v1/index/video?tiled_encoding=false&ocr=${ocr}&whisper=${whisper}&adaptive_fps=${adaptive}`, true);
+    xhr.open("POST", `${API_BASE}/v1/index/video?tiled_encoding=false&ocr=${ocr}&whisper=${whisper}&adaptive_fps=${adaptive}&speed_preset=${speedPreset}`, true);
 
     xhr.upload.onprogress = function(e) {
       if (e.lengthComputable) {
@@ -1498,6 +1623,211 @@
       console.error("Failed to dismiss task:", e);
     }
   };
+
+  // ---- Sports Analytics JS ----
+  const sportsRunBtn = document.getElementById("sports-run-btn");
+  const sportsUpdateHeatmapBtn = document.getElementById("sports-update-heatmap-btn");
+  const sportsVideoSelect = document.getElementById("sports-video-select");
+  const sportsFilter = document.getElementById("sports-filter");
+  const sportsCmap = document.getElementById("sports-cmap");
+  const sportsHeatmapImg = document.getElementById("sports-heatmap-img");
+  const sportsHeatmapPlaceholder = document.getElementById("sports-heatmap-placeholder");
+  const sportsHighlightsVideo = document.getElementById("sports-highlights-video");
+  const sportsHighlightsPlaceholder = document.getElementById("sports-highlights-placeholder");
+  const sportsFormationsContent = document.getElementById("sports-formations-content");
+  const sportsEventsContent = document.getElementById("sports-events-content");
+  
+  // Tabs switching
+  const sportsTabFormations = document.getElementById("sports-tab-formations");
+  const sportsTabEvents = document.getElementById("sports-tab-events");
+  const sportsFormationsPanel = document.getElementById("sports-formations-panel");
+  const sportsEventsPanel = document.getElementById("sports-events-panel");
+  
+  if (sportsTabFormations && sportsTabEvents) {
+    sportsTabFormations.addEventListener("click", () => {
+      sportsTabFormations.classList.add("active");
+      sportsTabEvents.classList.remove("active");
+      sportsFormationsPanel.style.display = "block";
+      sportsEventsPanel.style.display = "none";
+    });
+    
+    sportsTabEvents.addEventListener("click", () => {
+      sportsTabEvents.classList.add("active");
+      sportsTabFormations.classList.remove("active");
+      sportsEventsPanel.style.display = "block";
+      sportsFormationsPanel.style.display = "none";
+    });
+  }
+
+  window.switchToOverview = function() {
+    const overviewBtn = document.querySelector('.top-nav-btn[data-page="dashboard"]');
+    if (overviewBtn) {
+      overviewBtn.click();
+    }
+  }
+
+  window.updateSportsVideoSelect = function(videos) {
+    if (!sportsVideoSelect) return;
+    
+    const warningBanner = document.getElementById("no-videos-warning");
+    if (warningBanner) {
+      if (videos.length === 0) {
+        warningBanner.style.display = "flex";
+      } else {
+        warningBanner.style.display = "none";
+      }
+    }
+    
+    const currentVal = sportsVideoSelect.value;
+    sportsVideoSelect.innerHTML = '<option value="">-- Select Match Video --</option>';
+    if (videos.length === 0) {
+      sportsVideoSelect.innerHTML = '<option value="">-- No Indexed Videos --</option>';
+      return;
+    }
+    videos.forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      sportsVideoSelect.appendChild(opt);
+    });
+    if (videos.includes(currentVal)) {
+      sportsVideoSelect.value = currentVal;
+    }
+  }
+
+  async function runSportsAnalysis(isHeatmapOnly = false) {
+    const videoId = sportsVideoSelect.value;
+    if (!videoId) {
+      alert("Please select an indexed match video first.");
+      return;
+    }
+    
+    const playerFilter = sportsFilter.value;
+    const colormapStyle = sportsCmap.value;
+    
+    if (!isHeatmapOnly) {
+      sportsRunBtn.disabled = true;
+      sportsRunBtn.innerHTML = '<i class="ti ti-loader rotate"></i> Analyzing...';
+      sportsFormationsContent.innerHTML = '<div style="color:var(--muted); text-align:center; padding:40px;"><i class="ti ti-loader rotate" style="font-size:32px; display:block; margin-bottom:8px;"></i>Processing tactical shapes...</div>';
+      sportsEventsContent.innerHTML = '<div style="color:var(--muted); text-align:center; padding:40px;"><i class="ti ti-loader rotate" style="font-size:32px; display:block; margin-bottom:8px;"></i>Detecting match events...</div>';
+    } else {
+      sportsUpdateHeatmapBtn.disabled = true;
+      sportsUpdateHeatmapBtn.innerHTML = '<i class="ti ti-loader rotate"></i> Re-rendering...';
+    }
+    
+    try {
+      const params = new URLSearchParams({
+        video_id: videoId,
+        player_filter: playerFilter,
+        colormap: colormapStyle
+      });
+      const res = await fetch(`${API_BASE}/v1/sports/analytics?${params.toString()}`, {
+        method: "POST"
+      });
+      if (!res.ok) {
+        throw new Error(await res.text() || "Failed to process sports analytics");
+      }
+      
+      const data = await res.json();
+      
+      // Update Heatmap image
+      sportsHeatmapImg.src = `${API_BASE}${data.heatmap_url}&t=${Date.now()}`;
+      sportsHeatmapImg.style.display = "block";
+      sportsHeatmapPlaceholder.style.display = "none";
+      
+      if (!isHeatmapOnly) {
+        // Update Formations
+        let formationsHtml = `
+          <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13.5px;">
+            <thead>
+              <tr style="border-bottom:2px solid var(--border); color:var(--muted);">
+                <th style="padding:10px 8px;">Time Block</th>
+                <th style="padding:10px 8px;">Formation</th>
+                <th style="padding:10px 8px;">Duration</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+        if (data.formations && data.formations.length > 0) {
+          data.formations.forEach(f => {
+            const startFmt = `${Math.floor(f.start_time / 60)}m ${Math.floor(f.start_time % 60)}s`;
+            const endFmt = `${Math.floor(f.end_time / 60)}m ${Math.floor(f.end_time % 60)}s`;
+            formationsHtml += `
+              <tr style="border-bottom:1px solid var(--border-soft);">
+                <td style="padding:10px 8px; font-weight:600;">${startFmt} - ${endFmt}</td>
+                <td style="padding:10px 8px; color:var(--blue); font-weight:700;">${f.formation}</td>
+                <td style="padding:10px 8px; color:var(--muted);">${f.duration.toFixed(1)}s</td>
+              </tr>
+            `;
+          });
+        } else {
+          formationsHtml += '<tr><td colspan="3" style="padding:20px; text-align:center; color:var(--muted);">No formations tracked.</td></tr>';
+        }
+        formationsHtml += '</tbody></table>';
+        sportsFormationsContent.innerHTML = formationsHtml;
+        
+        // Update Events
+        let eventsHtml = `
+          <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13.5px;">
+            <thead>
+              <tr style="border-bottom:2px solid var(--border); color:var(--muted);">
+                <th style="padding:10px 8px;">Time</th>
+                <th style="padding:10px 8px;">Event</th>
+                <th style="padding:10px 8px;">Confidence</th>
+                <th style="padding:10px 8px;">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+        if (data.events && data.events.length > 0) {
+          data.events.forEach(e => {
+            const emoji = e.event_type === "GOAL" ? "⚽" : e.event_type === "FOUL" ? "⚠️" : e.event_type === "SUBSTITUTION" ? "🔄" : e.event_type === "RED_CARD" ? "🚨" : "⚙️";
+            eventsHtml += `
+              <tr style="border-bottom:1px solid var(--border-soft);">
+                <td style="padding:10px 8px; font-weight:600;">${e.timestamp.toFixed(1)}s</td>
+                <td style="padding:10px 8px; font-weight:700;">${emoji} ${e.event_type}</td>
+                <td style="padding:10px 8px; color:var(--green-text); font-weight:600;">${(e.confidence*100).toFixed(1)}%</td>
+                <td style="padding:10px 8px; color:var(--muted);">${e.description}</td>
+              </tr>
+            `;
+          });
+        } else {
+          eventsHtml += '<tr><td colspan="4" style="padding:20px; text-align:center; color:var(--muted);">No match events detected.</td></tr>';
+        }
+        eventsHtml += '</tbody></table>';
+        sportsEventsContent.innerHTML = eventsHtml;
+        
+        // Update Highlights video
+        if (data.highlights_url) {
+          sportsHighlightsVideo.src = `${API_BASE}${data.highlights_url}&t=${Date.now()}`;
+          sportsHighlightsVideo.style.display = "block";
+          sportsHighlightsPlaceholder.style.display = "none";
+        } else {
+          sportsHighlightsVideo.style.display = "none";
+          sportsHighlightsPlaceholder.style.display = "block";
+          sportsHighlightsPlaceholder.innerHTML = '<i class="ti ti-video-off" style="font-size:48px; display:block; margin-bottom:12px; color:var(--muted-soft);"></i>No video footage available locally to cut highlights.';
+        }
+      }
+      
+    } catch (e) {
+      alert("Failed running sports analytics: " + e.message);
+    } finally {
+      if (!isHeatmapOnly) {
+        sportsRunBtn.disabled = false;
+        sportsRunBtn.innerHTML = '<i class="ti ti-activity"></i> Run Analysis';
+      } else {
+        sportsUpdateHeatmapBtn.disabled = false;
+        sportsUpdateHeatmapBtn.innerHTML = '<i class="ti ti-refresh"></i> Update Heatmap';
+      }
+    }
+  }
+  
+  if (sportsRunBtn) {
+    sportsRunBtn.addEventListener("click", () => runSportsAnalysis(false));
+  }
+  if (sportsUpdateHeatmapBtn) {
+    sportsUpdateHeatmapBtn.addEventListener("click", () => runSportsAnalysis(true));
+  }
 
   // ---- Initialize ----
   fetchStats();

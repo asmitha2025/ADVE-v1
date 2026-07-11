@@ -18,10 +18,16 @@ class DeltaTracker:
     This is the core cost-saving path.
     """
 
-    def __init__(self, yolo: YOLO, device: str = 'cpu', imgsz: int = 320):
-        self.yolo   = yolo  # Same shared YOLO instance as AnchorProcessor
+    def __init__(self, yolo_or_pipeline, device: str = 'cpu', imgsz: int = 320):
+        self._yolo_or_pipeline = yolo_or_pipeline
         self.device = device
         self.imgsz  = imgsz
+
+    @property
+    def yolo(self):
+        if hasattr(self._yolo_or_pipeline, "yolo"):
+            return self._yolo_or_pipeline.yolo
+        return self._yolo_or_pipeline
 
     def track(
         self,

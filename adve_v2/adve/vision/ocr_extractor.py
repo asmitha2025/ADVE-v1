@@ -174,6 +174,10 @@ class OCRExtractor:
         total = len(anchor_timestamps)
         found = 0
 
+        prev_gray = None
+        last_results = []
+        skipped_count = 0
+
         for i, timestamp in enumerate(anchor_timestamps):
             cap.set(cv2.CAP_PROP_POS_MSEC, timestamp * 1000)
             ret, frame = cap.read()
@@ -181,18 +185,51 @@ class OCRExtractor:
                 continue
 
             frame_idx = int(timestamp * fps)
-            results   = self.extract_from_frame(frame, timestamp, frame_idx, video_id)
 
-            if results:
-                self.store_results(results)
-                found += len(results)
+            # Cheap visual change check
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            gray_small = cv2.resize(gray, (64, 64), interpolation=cv2.INTER_AREA)
+
+            skip_ocr = False
+            mean_diff = 0.0
+            if prev_gray is not None:
+                diff = cv2.absdiff(gray_small, prev_gray)
+                mean_diff = diff.mean()
+                if mean_diff < 1.5:  # Extremely high visual similarity (identical frame)
+                    skip_ocr = True
+
+            if skip_ocr:
+                skipped_count += 1
+                if last_results:
+                    # Duplicate the last results with the current timestamp and frame index
+                    duplicated_results = []
+                    for r in last_results:
+                        duplicated_results.append(OCRResult(
+                            text       = r.text,
+                            confidence = r.confidence,
+                            bbox       = r.bbox,
+                            timestamp  = timestamp,
+                            frame_idx  = frame_idx,
+                            video_id   = video_id,
+                        ))
+                    self.store_results(duplicated_results)
+                    found += len(duplicated_results)
+            else:
+                results = self.extract_from_frame(frame, timestamp, frame_idx, video_id)
+                if results:
+                    self.store_results(results)
+                    found += len(results)
+                    last_results = results
+                else:
+                    last_results = []
+                prev_gray = gray_small
 
             if progress_fn and i % 10 == 0:
-                progress_fn(i / total, f"OCR: {i}/{total} frames, {found} text found")
+                progress_fn(i / total, f"OCR: {i}/{total} frames, {found} text found (skipped {skipped_count} identical)")
 
         cap.release()
 
-        print(f"OCR complete: {found} text items from {total} anchor frames")
+        print(f"OCR complete: {found} text items from {total} anchor frames (skipped {skipped_count} identical frames)")
         return {"text_items_found": found, "frames_processed": total}
 
     # ── Search ────────────────────────────────────────────────────────────
