@@ -1,0 +1,12 @@
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics>=8.0.0
+opencv-python>=4.7.0
+numpy>=1.22.0
+tqdm>=4.65.0
+ftfy>=6.1.1
+regex>=2022.10.31
+onnx>=1.14.0
+onnxruntime>=1.15.0
+faiss-cpu>=1.7.4
+scikit-learn>=1.2.0

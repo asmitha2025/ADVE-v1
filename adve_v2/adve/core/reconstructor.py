@@ -73,18 +73,44 @@ class EmbeddingReconstructor:
                     import warnings
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore", FutureWarning)
-                        state_dict = torch.load(path, map_location=self.device, weights_only=False)
-                    clip_dim = 512
-                    for key in ["net.8.bias", "net.8.weight", "net.6.bias", "net.6.weight"]:
-                        if key in state_dict:
-                            clip_dim = state_dict[key].shape[0]
-                            break
+                        loaded = torch.load(path, map_location=self.device, weights_only=False)
 
-                    self.model = ReconstructionMLP(clip_dim=clip_dim)
-                    self.model.load_state_dict(state_dict)
-                    self.model.eval()
-                    print(f"[EmbeddingReconstructor] Loaded ReconstructionMLP (clip_dim={clip_dim}) from {path}")
-                    break
+                    if isinstance(loaded, dict) and "model_state_dict" in loaded:
+                        version = loaded.get("version", "v2")
+                        config_kwargs = loaded.get("config", {"clip_dim": 512, "delta_dim": 128, "hidden_dim": 512})
+
+                        if version == "v3":
+                            from adve.core.reconstructor_v3 import DeltaReconstructorV3
+                            self.model = DeltaReconstructorV3(**config_kwargs).to(self.device)
+                            self.model.load_state_dict(loaded["model_state_dict"])
+                            self.is_v3 = True
+                            self.is_v2 = False
+                            self.model.eval()
+                            self.hidden_state = None
+                            print(f"[EmbeddingReconstructor] Loaded DeltaReconstructorV3 from {path}")
+                        else:
+                            from adve.core.reconstructor_v2 import DeltaReconstructor
+                            self.model = DeltaReconstructor(**config_kwargs).to(self.device)
+                            self.model.load_state_dict(loaded["model_state_dict"])
+                            self.is_v2 = True
+                            self.is_v3 = False
+                            self.model.eval()
+                            print(f"[EmbeddingReconstructor] Loaded DeltaReconstructor v2 from {path}")
+                        break
+                    else:
+                        state_dict = loaded
+                        clip_dim = 512
+                        for key in ["net.8.bias", "net.8.weight", "net.6.bias", "net.6.weight"]:
+                            if key in state_dict:
+                                clip_dim = state_dict[key].shape[0]
+                                break
+
+                        self.model = ReconstructionMLP(clip_dim=clip_dim)
+                        self.model.load_state_dict(state_dict)
+                        self.is_v2 = False
+                        self.model.eval()
+                        print(f"[EmbeddingReconstructor] Loaded ReconstructionMLP (clip_dim={clip_dim}) from {path}")
+                        break
                 except Exception as e:
                     print(f"[EmbeddingReconstructor] Failed to load model weights from {path}: {e}")
 
@@ -157,17 +183,50 @@ class EmbeddingReconstructor:
         if self.model is not None:
             try:
                 import torch
-                delta_vec = self.delta_to_vector(delta)
-                object_pool = self.pool_object_embeddings(current_graph.objects, clip_dim=clip_dim)
+                if getattr(self, "is_v3", False):
+                    # ── DeltaReconstructorV3 with clamped GRU + EMA ──
+                    from adve.core.reconstructor_v2 import DeltaFeatureExtractor
+                    extractor = DeltaFeatureExtractor(dim=128)
+                    delta_vec = extractor.extract_numpy(delta, current_graph, anchor_graph)
+                    anchor_t = torch.tensor(anchor_emb_single, dtype=torch.float32).unsqueeze(0).to(self.device)
+                    delta_t = torch.tensor(delta_vec, dtype=torch.float32).unsqueeze(0).to(self.device)
+                    h_prev = getattr(self, "hidden_state", None)
+                    with torch.no_grad():
+                        pred_t, h_next = self.model(anchor_t, delta_t, h_prev)
+                        self.hidden_state = h_next
+                        raw_reconstructed = pred_t.squeeze(0).cpu().numpy()
+                    # EMA smoothing
+                    prev = getattr(self, "_prev_reconstructed", None)
+                    if prev is not None:
+                        ema_alpha = 0.65
+                        smoothed = ema_alpha * raw_reconstructed + (1.0 - ema_alpha) * prev
+                        smoothed = smoothed / (np.linalg.norm(smoothed) + 1e-8)
+                    else:
+                        smoothed = raw_reconstructed
+                    self._prev_reconstructed = smoothed.copy()
+                    return smoothed.astype(np.float32)
+                elif getattr(self, "is_v2", False):
+                    from adve.core.reconstructor_v2 import DeltaFeatureExtractor
+                    extractor = DeltaFeatureExtractor(dim=128)
+                    delta_vec = extractor.extract_numpy(delta, current_graph, anchor_graph)
+                    anchor_t = torch.tensor(anchor_emb_single, dtype=torch.float32).unsqueeze(0).to(self.device)
+                    delta_t = torch.tensor(delta_vec, dtype=torch.float32).unsqueeze(0).to(self.device)
+                    with torch.no_grad():
+                        pred_t, _ = self.model(anchor_t, delta_t)
+                        reconstructed = pred_t.squeeze(0).cpu().numpy()
+                    return reconstructed.astype(np.float32)
+                else:
+                    delta_vec = self.delta_to_vector(delta)
+                    object_pool = self.pool_object_embeddings(current_graph.objects, clip_dim=clip_dim)
 
-                anchor_t = torch.tensor(anchor_emb_single, dtype=torch.float32).unsqueeze(0).to(self.device)
-                pool_t = torch.tensor(object_pool, dtype=torch.float32).unsqueeze(0).to(self.device)
-                delta_t = torch.tensor(delta_vec[:128], dtype=torch.float32).unsqueeze(0).to(self.device)
+                    anchor_t = torch.tensor(anchor_emb_single, dtype=torch.float32).unsqueeze(0).to(self.device)
+                    pool_t = torch.tensor(object_pool, dtype=torch.float32).unsqueeze(0).to(self.device)
+                    delta_t = torch.tensor(delta_vec[:128], dtype=torch.float32).unsqueeze(0).to(self.device)
 
-                with torch.no_grad():
-                    pred_t = self.model(anchor_t, pool_t, delta_t)
-                    reconstructed = pred_t.squeeze(0).cpu().numpy()
-                return reconstructed.astype(np.float32)
+                    with torch.no_grad():
+                        pred_t = self.model(anchor_t, pool_t, delta_t)
+                        reconstructed = pred_t.squeeze(0).cpu().numpy()
+                    return reconstructed.astype(np.float32)
             except Exception as e:
                 print(f"[EmbeddingReconstructor] MLP inference failed: {e}. Falling back to weighted average.")
 

@@ -1,0 +1,70 @@
+{
+  "timestamp": "2026-07-26 19:18:29",
+  "enterprise_ready": false,
+  "badge": "NEEDS IMPROVEMENT",
+  "overall_metrics": {
+    "mean_cosine_sim": 0.9545,
+    "min_cosine_sim": 0.725,
+    "mean_encoder_savings_pct": 97.04,
+    "mean_effective_fps": 7.55
+  },
+  "domain_breakdown": {
+    "urban_surveillance": 0.9571000000000001,
+    "retail_indoor": 0.9632,
+    "traffic_monitoring": 0.9404
+  },
+  "video_results": [
+    {
+      "name": "MOT17-02-SDP-raw",
+      "path": "c:\\Users\\harih\\OneDrive\\Documents\\codex try\\adve\\Input video\\MOT17-02-SDP-raw.webm",
+      "domain": "urban_surveillance",
+      "total_frames": 150,
+      "encoder_calls": 4,
+      "encoder_savings_pct": 97.33,
+      "mean_cosine_sim": 0.9777,
+      "min_cosine_sim": 0.9332,
+      "pct_above_threshold": 100.0,
+      "effective_fps": 7.3,
+      "elapsed_sec": 21.06
+    },
+    {
+      "name": "benchmark_test",
+      "path": "c:\\Users\\harih\\OneDrive\\Documents\\codex try\\adve\\adve_v2\\benchmark_test.mp4",
+      "domain": "retail_indoor",
+      "total_frames": 300,
+      "encoder_calls": 8,
+      "encoder_savings_pct": 97.33,
+      "mean_cosine_sim": 0.9632,
+      "min_cosine_sim": 0.8707,
+      "pct_above_threshold": 100.0,
+      "effective_fps": 8.5,
+      "elapsed_sec": 18.19
+    },
+    {
+      "name": "demo_clip_1bqQHEbVlFc",
+      "path": "c:\\Users\\harih\\OneDrive\\Documents\\codex try\\adve\\demo_videos\\1bqQHEbVlFc.mp4",
+      "domain": "urban_surveillance",
+      "total_frames": 450,
+      "encoder_calls": 15,
+      "encoder_savings_pct": 96.67,
+      "mean_cosine_sim": 0.9365,
+      "min_cosine_sim": 0.725,
+      "pct_above_threshold": 91.49,
+      "effective_fps": 7.1,
+      "elapsed_sec": 21.86
+    },
+    {
+      "name": "demo_clip_5sLYAQS9sWQ",
+      "path": "c:\\Users\\harih\\OneDrive\\Documents\\codex try\\adve\\demo_videos\\5sLYAQS9sWQ.mp4",
+      "domain": "traffic_monitoring",
+      "total_frames": 600,
+      "encoder_calls": 19,
+      "encoder_savings_pct": 96.83,
+      "mean_cosine_sim": 0.9404,
+      "min_cosine_sim": 0.725,
+      "pct_above_threshold": 93.63,
+      "effective_fps": 7.3,
+      "elapsed_sec": 21.18
+    }
+  ]
+}

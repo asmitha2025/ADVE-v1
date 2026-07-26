@@ -13,3 +13,8 @@ def load_clip_cached(model_name: str, device: str):
     else:
         print(f"[CLIP Loader] Using cached CLIP model {model_name} on {device}.")
     return _clip_cache[key]
+
+
+def load_clip_model(model_name: str = "ViT-B/32", device: str = "cuda"):
+    return load_clip_cached(model_name, device)
+

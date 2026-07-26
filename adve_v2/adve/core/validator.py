@@ -67,7 +67,7 @@ class Validator:
             "total_frames":          total_frames,
             "encoder_calls":         encoder_calls,
             "delta_frames":          total_frames - encoder_calls,
-            "encoder_savings_pct":   round((1 - encoder_calls / total_frames) * 100, 2),
+            "encoder_savings_pct":   round((1 - encoder_calls / total_frames) * 100, 2) if total_frames > 0 else 0.0,
             "mean_cosine_sim":       round(float(np.mean(all_sims)), 4)   if all_sims   else 0,
             "mean_delta_cosine_sim": round(float(np.mean(delta_sims)), 4) if delta_sims else 0,
             "min_delta_cosine_sim":  round(float(np.min(delta_sims)), 4)  if delta_sims else 0,

@@ -1,0 +1,16 @@
+{
+  "video": "benchmark_test.mp4",
+  "total_frames": 300,
+  "fps": 7.8,
+  "encoder_savings_pct": 97.0,
+  "mean_cosine_sim": 0.9431,
+  "min_cosine_sim": 0.8707,
+  "peak_vram_mb": 0.0,
+  "elapsed_sec": 39.0,
+  "targets_met": {
+    "fps_target_80": false,
+    "savings_target_75": true,
+    "cossim_target_99": false,
+    "vram_target_350": true
+  }
+}

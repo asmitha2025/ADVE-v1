@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import os
 import time
+import torch
 from typing import Optional
 from ultralytics import YOLO
 from adve.core.frame_filter import FrameFilter
@@ -11,6 +12,7 @@ from adve.core.spatial_graph import SpatialGraph
 from adve.core.anchor import AnchorProcessor
 from adve.core.tracker import DeltaTracker
 from adve.core.reconstructor import EmbeddingReconstructor
+from adve.core.reconstructor_v2 import DeltaReconstructor, DeltaFeatureExtractor
 from adve.core.validator import Validator
 
 
@@ -40,6 +42,7 @@ class ADVEPipeline:
         self.delta_tracker   = DeltaTracker(self, device=yolo_device, imgsz=yolo_imgsz)
         self.reconstructor   = EmbeddingReconstructor(config.MLP_MODEL_PATH)
         self.validator       = Validator(config)
+        self.hidden_state    = None
 
         # Live state
         self.anchor_graph:     Optional[SpatialGraph] = None
@@ -94,6 +97,7 @@ class ADVEPipeline:
         self.anchor_kp = None
         self.anchor_des = None
         self.anchor_orb_scale = 1.0
+        self.hidden_state = None
 
 
     # ------------------------------------------------------------------
@@ -227,6 +231,13 @@ class ADVEPipeline:
             delta_magnitude = delta["total_magnitude"]
             refresh = self._needs_anchor(delta, appearance_delta)
 
+            # Fix #2: Confidence-Gated Anchor Refresh to protect worst-case frames
+            if current_graph is not None and current_graph.objects:
+                confs = [getattr(obj, "confidence", 0.5) for obj in current_graph.objects.values()]
+                avg_conf = float(np.mean(confs)) if confs else 1.0
+                if avg_conf < 0.35:
+                    refresh = True
+
         # --- Process ---
         if refresh:
             # ── ANCHOR FRAME ──────────────────────────────────────
@@ -255,6 +266,12 @@ class ADVEPipeline:
                 self.anchor_buffer.pop(0)
 
             self.frames_since_anchor = 0
+            self.hidden_state = None  # Reset GRU state on anchor refresh
+            # Reset reconstructor v3 internal state on anchor refresh
+            if hasattr(self.reconstructor, 'hidden_state'):
+                self.reconstructor.hidden_state = None
+            if hasattr(self.reconstructor, '_prev_reconstructed'):
+                self.reconstructor._prev_reconstructed = None
             is_anchor      = True
             encoder_called = True
 
@@ -361,11 +378,17 @@ class ADVEPipeline:
             if max_frames is not None and frame_idx >= max_frames:
                 break
 
-            ret, frame = cap.read()
-            if not ret:
-                break
+            try:
+                ret, frame = cap.read()
+                if not ret or frame is None:
+                    break
 
-            res = self.process_frame(frame, frame_idx, no_validation=no_validation)
+                res = self.process_frame(frame, frame_idx, no_validation=no_validation)
+            except Exception as frame_err:
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                break
 
             if frame_idx % 15 == 0:
                 tag = "ANCHOR" if res["is_anchor"] else "DELTA "

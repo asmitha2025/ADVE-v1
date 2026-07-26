@@ -212,7 +212,8 @@ class AnchorProcessor:
                 tensors.append(preprocess(pil_img))
 
         with torch.no_grad():
-            batch_tensor = torch.stack(tensors).to(self.device)
+            model_device = next(self.clip_model.parameters()).device
+            batch_tensor = torch.stack(tensors).to(model_device)
             embs    = self.clip_model.encode_image(batch_tensor)
             embs    = embs / embs.norm(dim=-1, keepdim=True)
 
