@@ -86,59 +86,8 @@ class TestSpatialGraph:
         assert 2 in delta["lost_objects"]
 
 
-# ── Reconstructor Tests ───────────────────────────────────────────────────────
-
-class TestReconstructor:
-    def setup_method(self):
-        from adve.core.reconstructor import EmbeddingReconstructor
-        from adve.core.spatial_graph import SpatialGraph, ObjectState
-
-        self.reconstructor = EmbeddingReconstructor()
-        self.SpatialGraph  = SpatialGraph
-        self.ObjectState   = ObjectState
-
-    def _make_graph_with_emb(self, positions, embeddings):
-        g = self.SpatialGraph()
-        for i, ((cx, cy), emb) in enumerate(zip(positions, embeddings)):
-            g.add_object(self.ObjectState(
-                obj_id=i, class_name="person",
-                bbox=(int(cx-20), int(cy-20), int(cx+20), int(cy+20)),
-                center=(cx, cy), area=1000.0, embedding=emb,
-            ))
-        g.build_relations()
-        return g
-
-    def test_output_is_unit_normalized(self):
-        embs  = [np.random.randn(512).astype(np.float32) for _ in range(3)]
-        g     = self._make_graph_with_emb([(100,100),(200,200),(300,100)], embs)
-        delta = g.compute_delta(g)
-        anchor_emb = np.random.randn(512).astype(np.float32)
-        anchor_emb /= np.linalg.norm(anchor_emb)
-
-        result = self.reconstructor.reconstruct(g, g, delta, anchor_emb)
-        assert abs(np.linalg.norm(result) - 1.0) < 1e-5
-
-    def test_static_scene_returns_close_to_anchor(self):
-        """When ΔG ≈ 0, result should be very close to anchor embedding."""
-        embs  = [np.random.randn(512).astype(np.float32) for _ in range(2)]
-        g     = self._make_graph_with_emb([(100,100),(300,100)], embs)
-        delta = {"total_magnitude": 0.0, "relation_deltas": {}, "new_objects": [], "lost_objects": []}
-        anchor_emb = np.random.randn(512).astype(np.float32)
-        anchor_emb /= np.linalg.norm(anchor_emb)
-
-        result = self.reconstructor.reconstruct(g, g, delta, anchor_emb)
-        sim = float(np.dot(result, anchor_emb))
-        assert sim > 0.95, f"Expected sim>0.95, got {sim:.4f}"
-
-    def test_no_objects_returns_anchor(self):
-        """If no objects have embeddings, return anchor unchanged."""
-        g = self.SpatialGraph()
-        delta = {"total_magnitude": 0.0, "relation_deltas": {}, "new_objects": [], "lost_objects": []}
-        anchor_emb = np.random.randn(512).astype(np.float32)
-        anchor_emb /= np.linalg.norm(anchor_emb)
-
-        result = self.reconstructor.reconstruct(g, g, delta, anchor_emb)
-        assert np.allclose(result, anchor_emb)
+# (Reconstructor tests removed: the embedding-reconstruction stack was retired
+# in favour of CLIP-only indexing — see adve/core/pipeline.py and lean_indexer.)
 
 
 # ── Search Index Tests ────────────────────────────────────────────────────────
