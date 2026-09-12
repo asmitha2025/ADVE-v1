@@ -47,7 +47,7 @@ class Backend:
     name = "backend"
     price_per_call = 0.0
 
-    def quality(self, video, track, ref, picks, queries) -> float:
+    def quality(self, video, track, ref, picks, queries, frames=None) -> float:
         raise NotImplementedError
 
 
@@ -56,15 +56,16 @@ class ClipParityBackend(Backend):
     full-compute reference. Runs on the GPU you already have."""
     name = "clip_parity_proxy"
 
-    def __init__(self, embedder, price_per_call: float):
+    def __init__(self, embedder, price_per_call: float, window_sec: float = 2.0):
         self.embedder = embedder
         self.price_per_call = price_per_call
+        self.window_sec = window_sec
 
-    def quality(self, video, track, ref, picks, queries) -> float:
+    def quality(self, video, track, ref, picks, queries, frames=None) -> float:
         cand = build_routed_index(video, track, self.embedder,
-                                  pick_indices=picks, fill="slerp")
+                                  pick_indices=picks, fill="slerp", frames=frames)
         _, agg = compare_indexes(ref, cand, self.embedder, queries,
-                                 k=10, window_sec=2.0)
+                                 k=10, window_sec=self.window_sec)
         return float(agg["recall_temporal"])
 
 
@@ -118,13 +119,16 @@ class GroqVisionBackend(Backend):
             "Run with --backend clip to use the retrieval proxy instead."
         )
 
-    def _yesno(self, video: str, frame_idx: int, query: str) -> bool:
+    def _yesno(self, video: str, frame_idx: int, query: str, frames=None) -> bool:
         import base64, cv2
         key = (frame_idx, query)
         if key in self._cache:
             return self._cache[key]
-        from bench.parity import read_frames
-        fr = read_frames(video, [frame_idx]).get(frame_idx)
+        if frames is not None and frame_idx in frames:
+            fr = frames[frame_idx]
+        else:
+            from bench.parity import read_frames
+            fr = read_frames(video, [frame_idx]).get(frame_idx)
         if fr is None:
             self._cache[key] = False
             return False
@@ -146,15 +150,15 @@ class GroqVisionBackend(Backend):
         self._cache[key] = ans
         return ans
 
-    def quality(self, video, track, ref, picks, queries) -> float:
+    def quality(self, video, track, ref, picks, queries, frames=None) -> float:
         cand = build_routed_index(video, track, self.embedder,
-                                  pick_indices=picks, fill="slerp")
+                                  pick_indices=picks, fill="slerp", frames=frames)
         agree = 0
         for q in queries:
             qv = self.embedder.embed_text([q])[0]
             ref_top = ref.frame_idx[int(ref.index.search(qv, k=1)[0][0])]
             cand_top = cand.frame_idx[int(cand.index.search(qv, k=1)[0][0])]
-            if self._yesno(video, ref_top, q) == self._yesno(video, cand_top, q):
+            if self._yesno(video, ref_top, q, frames) == self._yesno(video, cand_top, q, frames):
                 agree += 1
         return agree / max(len(queries), 1)
 
@@ -176,13 +180,16 @@ class GeminiVisionBackend(Backend):
         self.key = os.environ["GEMINI_API_KEY"]
         self._cache: Dict[tuple, bool] = {}
 
-    def _yesno(self, video: str, frame_idx: int, query: str) -> bool:
+    def _yesno(self, video: str, frame_idx: int, query: str, frames=None) -> bool:
         import base64, cv2, json, urllib.request
         key = (frame_idx, query)
         if key in self._cache:
             return self._cache[key]
-        from bench.parity import read_frames
-        fr = read_frames(video, [frame_idx]).get(frame_idx)
+        if frames is not None and frame_idx in frames:
+            fr = frames[frame_idx]
+        else:
+            from bench.parity import read_frames
+            fr = read_frames(video, [frame_idx]).get(frame_idx)
         if fr is None:
             self._cache[key] = False
             return False
@@ -211,20 +218,21 @@ class GeminiVisionBackend(Backend):
         self._cache[key] = ans
         return ans
 
-    def quality(self, video, track, ref, picks, queries) -> float:
+    def quality(self, video, track, ref, picks, queries, frames=None) -> float:
         cand = build_routed_index(video, track, self.embedder,
-                                  pick_indices=picks, fill="slerp")
+                                  pick_indices=picks, fill="slerp", frames=frames)
         agree = 0
         for q in queries:
             qv = self.embedder.embed_text([q])[0]
             ref_top = ref.frame_idx[int(ref.index.search(qv, k=1)[0][0])]
             cand_top = cand.frame_idx[int(cand.index.search(qv, k=1)[0][0])]
-            if self._yesno(video, ref_top, q) == self._yesno(video, cand_top, q):
+            if self._yesno(video, ref_top, q, frames) == self._yesno(video, cand_top, q, frames):
                 agree += 1
         return agree / max(len(queries), 1)
 
 
-def pick_backend(embedder, price_per_call: float, backend: str = "auto") -> Backend:
+def pick_backend(embedder, price_per_call: float, backend: str = "auto",
+                 window_sec: float = 2.0) -> Backend:
     """auto: use a vision VLM if a key is set, else the CLIP proxy."""
     if backend == "gemini" or (backend == "auto" and os.environ.get("GEMINI_API_KEY")):
         try:
@@ -241,7 +249,7 @@ def pick_backend(embedder, price_per_call: float, backend: str = "auto") -> Back
         except Exception as e:
             print(f"[cost_parity] Groq backend unavailable ({e}); falling back to CLIP proxy")
     print("[cost_parity] backend = CLIP retrieval proxy (no API spend)")
-    return ClipParityBackend(embedder, price_per_call)
+    return ClipParityBackend(embedder, price_per_call, window_sec=window_sec)
 
 
 # --------------------------------------------------------------------------
@@ -260,6 +268,7 @@ class CostResult:
     full_calls: int
     routed_calls: int
     routed_quality: float
+    parity_met: bool
     uniform_calls_at_parity: Optional[int]
     reduction_x: float
     usd_full_per_hour: float
@@ -280,9 +289,10 @@ class CostResult:
             f"  {'full (every frame)':22}{self.full_calls:>10}{self.usd_full_per_hour:>17.2f}",
             f"  {'frameroute (routed)':22}{self.routed_calls:>10}{self.usd_routed_per_hour:>17.2f}",
             "  " + "-" * 60,
-            f"  reduction            {self.reduction_x:>9.1f}x",
+            f"  reduction            {self.reduction_x:>9.1f}x" + ("" if self.parity_met else "   [PARITY NOT MET]"),
             f"  saved / hour video   ${self.usd_saved_per_hour:>8.2f}   ({self.saved_pct:.0f}% cheaper)",
-            f"  routed quality       {self.routed_quality:>9.3f}   (target >= {self.parity_threshold})",
+            f"  routed quality       {self.routed_quality:>9.3f}   (target >= {self.parity_threshold}"
+            + ("" if self.parity_met else " — NOT reached at any tested budget") + ")",
         ]
         if self.uniform_calls_at_parity is not None:
             verdict = ("router wins" if self.router_beats_uniform else
@@ -293,41 +303,65 @@ class CostResult:
 
 
 def _min_budget_for_parity(video, track, ref, backend, queries,
-                           parity: float, policy: str) -> tuple[int, float]:
-    """Smallest #calls whose routed quality clears the parity bar."""
+                           parity: float, policy: str, frames=None) -> tuple[int, float, bool]:
+    """Smallest #calls whose routed quality clears the parity bar.
+    Returns (calls, quality, met) — met is False if the bar was never reached."""
     N = track.n_analyzed
     fracs = [0.02, 0.03, 0.05, 0.08, 0.12, 0.18, 0.25, 0.35, 0.5]
-    last_calls, last_q = ref.n_model_calls, 1.0
+    best_calls, best_q = ref.n_model_calls, 0.0
     for f in fracs:
         budget = max(2, int(round(N * f)))
         if policy == "router":
             picks = [p.idx for p in RouterPolicy(policy="coverage").select(track, budget=budget)]
         else:
             picks = [p.idx for p in UniformN(budget).select(track, budget=budget)]
-        q = backend.quality(video, track, ref, picks, queries)
+        q = backend.quality(video, track, ref, picks, queries, frames=frames)
         real_calls = len(set(i for i in picks if 0 <= i))
         print(f"    [{policy}] budget~{budget:<4} calls={real_calls:<4} quality={q:.3f}", flush=True)
-        last_calls, last_q = real_calls, q
+        if q > best_q:
+            best_q, best_calls = q, real_calls
         if q >= parity:
-            return real_calls, q
-    return last_calls, last_q  # never reached parity; report best
+            return real_calls, q, True
+    return best_calls, best_q, False  # never reached parity; report best seen
 
 
 def run(video: str, domain: str, price_per_call: float, parity: float,
-        stride: int, max_frames: int, weights: str, backend_choice: str = "auto") -> CostResult:
+        stride: int, max_frames: int, weights: str, backend_choice: str = "auto",
+        window_sec: float = 2.0, auto_span: bool = False) -> CostResult:
     from frameroute.adapters import ClipEmbedder
+    import cv2
     queries = queries_for(domain)
+
+    # auto_span: choose a stride that spreads `max_frames` analysed frames across
+    # the WHOLE video (not just its first seconds), and widen the temporal match
+    # window to match the coarser spacing. Without this, a long lecture is judged
+    # on its intro alone.
+    if auto_span:
+        cap = cv2.VideoCapture(video)
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        cap.release()
+        if total > 0:
+            stride = max(1, total // max_frames)
+            window_sec = max(window_sec, 1.6 * stride / fps)
+        print(f"[cost_parity] auto-span: stride={stride} window={window_sec:.1f}s (total={total} frames)", flush=True)
+
     print(f"[cost_parity] analysing {Path(video).name} ({domain}, {len(queries)} queries)", flush=True)
     track = analyze_video(video, stride=stride, max_frames=max_frames, weights=weights)
     emb = ClipEmbedder()
-    backend = pick_backend(emb, price_per_call, backend_choice)
+    backend = pick_backend(emb, price_per_call, backend_choice, window_sec=window_sec)
+
+    print(f"[cost_parity] decoding {track.n_analyzed} analysed frames once (cache)", flush=True)
+    from bench.parity import read_frames
+    frames = read_frames(video, [s.idx for s in track.signals])
+
     print(f"[cost_parity] building full-compute reference ({track.n_analyzed} calls)", flush=True)
-    ref = build_reference_index(video, track, emb)
+    ref = build_reference_index(video, track, emb, frames=frames)
 
     print("[cost_parity] finding minimum router budget that preserves quality:", flush=True)
-    r_calls, r_q = _min_budget_for_parity(video, track, ref, backend, queries, parity, "router")
+    r_calls, r_q, r_met = _min_budget_for_parity(video, track, ref, backend, queries, parity, "router", frames=frames)
     print("[cost_parity] same for uniform sampling (honesty check):", flush=True)
-    u_calls, u_q = _min_budget_for_parity(video, track, ref, backend, queries, parity, "uniform")
+    u_calls, u_q, u_met = _min_budget_for_parity(video, track, ref, backend, queries, parity, "uniform", frames=frames)
 
     full = ref.n_model_calls
     hours = track.duration_sec / 3600.0
@@ -338,9 +372,9 @@ def run(video: str, domain: str, price_per_call: float, parity: float,
     reduction = full / max(r_calls, 1)
 
     beats = None
-    if u_q >= parity and r_q >= parity:
+    if u_met and r_met:
         beats = r_calls <= u_calls
-    uniform_at = u_calls if u_q >= parity else None
+    uniform_at = u_calls if u_met else None
 
     note = ("Quality is retrieval parity (CLIP proxy); swap in a VLM backend for "
             "answer-level parity on real footage. Savings are calls avoided x your "
@@ -350,6 +384,7 @@ def run(video: str, domain: str, price_per_call: float, parity: float,
         frames_analyzed=track.n_analyzed, price_per_call_usd=price_per_call,
         parity_threshold=parity, quality_metric="temporal recall@10",
         full_calls=full, routed_calls=r_calls, routed_quality=round(r_q, 4),
+        parity_met=r_met,
         uniform_calls_at_parity=uniform_at,
         reduction_x=round(reduction, 2),
         usd_full_per_hour=round(usd_full, 2), usd_routed_per_hour=round(usd_routed, 2),
@@ -371,11 +406,15 @@ def main() -> None:
     ap.add_argument("--weights", default="default")
     ap.add_argument("--backend", default="auto", choices=["auto", "clip", "groq", "gemini"],
                     help="auto = Gemini/Groq if a key is set else CLIP proxy")
+    ap.add_argument("--window-sec", type=float, default=2.0)
+    ap.add_argument("--auto-span", action="store_true",
+                    help="spread analysis across the WHOLE video, not just its first seconds")
     ap.add_argument("--out", default="")
     a = ap.parse_args()
 
     res = run(a.video, a.domain, a.price_per_call, a.parity,
-              a.stride, a.max_frames, a.weights, a.backend)
+              a.stride, a.max_frames, a.weights, a.backend,
+              window_sec=a.window_sec, auto_span=a.auto_span)
     print(res.table())
     if a.out:
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)

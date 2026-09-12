@@ -166,9 +166,13 @@ class BuiltIndex:
 
 
 def build_reference_index(
-    video_path: str, track: SignalTrack, embedder, batch: int = 64
+    video_path: str, track: SignalTrack, embedder, batch: int = 64,
+    frames: Optional[Dict[int, np.ndarray]] = None,
 ) -> BuiltIndex:
-    """Full compute: an embedding for every analyzed frame. The upper bound."""
+    """Full compute: an embedding for every analyzed frame. The upper bound.
+
+    Pass `frames` (a pre-decoded {idx: frame} cache) to avoid re-decoding the
+    video — the sweep decodes once and reuses it across every index build."""
     t0 = time.perf_counter()
     idxs = [s.idx for s in track.signals]
     times = [s.t for s in track.signals]
@@ -177,10 +181,11 @@ def build_reference_index(
     vecs: List[np.ndarray] = []
     for i in range(0, len(idxs), batch):
         chunk = idxs[i:i + batch]
-        frames_map = read_frames(video_path, chunk)
-        frames = [frames_map[j] for j in chunk if j in frames_map]
-        if frames:
-            vecs.append(counting.embed_frames(frames))
+        frames_map = ({j: frames[j] for j in chunk if j in frames}
+                      if frames is not None else read_frames(video_path, chunk))
+        chunk_frames = [frames_map[j] for j in chunk if j in frames_map]
+        if chunk_frames:
+            vecs.append(counting.embed_frames(chunk_frames))
     V = np.concatenate(vecs, axis=0) if vecs else np.zeros((0, embedder.dim), np.float32)
     n = V.shape[0]
 
@@ -203,6 +208,7 @@ def build_routed_index(
     fill: str = "carry_forward",
     name: Optional[str] = None,
     custom_fill: Optional[Callable] = None,
+    frames: Optional[Dict[int, np.ndarray]] = None,
 ) -> BuiltIndex:
     """
     Spend model calls only on `pick_indices`; synthesise the rest.
@@ -210,6 +216,8 @@ def build_routed_index(
     The resulting index has the same number of rows as the reference, which
     is what makes the comparison fair: both indexes can return any moment in
     the video, they just differ in how much compute produced each row.
+
+    Pass `frames` (a pre-decoded {idx: frame} cache) to skip re-decoding.
     """
     t0 = time.perf_counter()
     all_idx = [s.idx for s in track.signals]
@@ -220,7 +228,8 @@ def build_routed_index(
         picks = [all_idx[0]]
 
     counting = CountingEmbedder(embedder)
-    frames_map = read_frames(video_path, picks)
+    frames_map = ({i: frames[i] for i in picks if i in frames}
+                  if frames is not None else read_frames(video_path, picks))
     ordered = [i for i in picks if i in frames_map]
     pv = counting.embed_frames([frames_map[i] for i in ordered])
 
