@@ -475,6 +475,8 @@ def analyze_video(
     weights: str | Dict[str, float] = "default",
     proc_size: Tuple[int, int] = (160, 90),
     progress: bool = False,
+    region_grid: int = 4,
+    region_gain: float = 0.6,
 ) -> SignalTrack:
     """
     One decode pass over the video producing a SignalTrack.
@@ -491,7 +493,8 @@ def analyze_video(
     n_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
 
     ex = SignalExtractor(
-        proc_width=proc_size[0], proc_height=proc_size[1], weights=weights
+        proc_width=proc_size[0], proc_height=proc_size[1], weights=weights,
+        region_grid=region_grid, region_gain=region_gain,
     )
     track = SignalTrack(
         video_path=video_path, fps=fps, n_frames_total=n_total, stride=stride

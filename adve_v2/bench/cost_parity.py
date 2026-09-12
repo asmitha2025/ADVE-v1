@@ -82,14 +82,41 @@ class GroqVisionBackend(Backend):
     """
     name = "groq_llama_vision_answer_parity"
 
-    def __init__(self, embedder, price_per_call: float,
-                 model: str = "llama-3.2-11b-vision-preview"):
+    # Known Groq vision-capable model families, most-preferred first. The old
+    # llama-3.2-vision previews were retired; llama-4 scout/maverick replaced
+    # them. We resolve against the key's actual model list at construction.
+    VISION_PREFERENCE = (
+        "meta-llama/llama-4-scout-17b-16e-instruct",
+        "meta-llama/llama-4-maverick-17b-128e-instruct",
+    )
+    VISION_HINTS = ("vision", "scout", "maverick", "llama-4")
+
+    def __init__(self, embedder, price_per_call: float, model: Optional[str] = None):
         from groq import Groq
         self.embedder = embedder
         self.price_per_call = price_per_call
-        self.model = model
         self.client = Groq(api_key=os.environ["GROQ_API_KEY"])
         self._cache: Dict[tuple, bool] = {}
+        self.model = model or self._resolve_vision_model()
+
+    def _resolve_vision_model(self) -> str:
+        try:
+            available = {m.id for m in self.client.models.list().data}
+        except Exception as e:
+            raise RuntimeError(f"Groq models.list failed: {e}")
+        for pref in self.VISION_PREFERENCE:
+            if pref in available:
+                return pref
+        for mid in available:
+            if any(h in mid.lower() for h in self.VISION_HINTS):
+                return mid
+        raise RuntimeError(
+            "This Groq key exposes no vision-capable model (available: "
+            + ", ".join(sorted(available))
+            + "). Frame-level answer parity needs a vision model — use an "
+            "OpenAI/Gemini key or a Groq account with llama-4-scout/maverick. "
+            "Run with --backend clip to use the retrieval proxy instead."
+        )
 
     def _yesno(self, video: str, frame_idx: int, query: str) -> bool:
         import base64, cv2
