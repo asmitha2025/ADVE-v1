@@ -159,10 +159,81 @@ class GroqVisionBackend(Backend):
         return agree / max(len(queries), 1)
 
 
+class GeminiVisionBackend(Backend):
+    """
+    Live answer-level parity on Google Gemini (multimodal). Same metric as the
+    Groq backend: for each query, ask Gemini the same yes/no question of the
+    ROUTED index's top frame and the FULL index's top frame, and score the
+    fraction of queries where routing did not change the answer. Uses the REST
+    API (no SDK dependency). Set GEMINI_API_KEY.
+    """
+    name = "gemini_answer_parity"
+
+    def __init__(self, embedder, price_per_call: float, model: str = "gemini-2.5-flash"):
+        self.embedder = embedder
+        self.price_per_call = price_per_call
+        self.model = model
+        self.key = os.environ["GEMINI_API_KEY"]
+        self._cache: Dict[tuple, bool] = {}
+
+    def _yesno(self, video: str, frame_idx: int, query: str) -> bool:
+        import base64, cv2, json, urllib.request
+        key = (frame_idx, query)
+        if key in self._cache:
+            return self._cache[key]
+        from bench.parity import read_frames
+        fr = read_frames(video, [frame_idx]).get(frame_idx)
+        if fr is None:
+            self._cache[key] = False
+            return False
+        h, w = fr.shape[:2]
+        if w > 600:
+            fr = cv2.resize(fr, (600, int(h * 600 / w)))
+        b64 = base64.b64encode(cv2.imencode(".jpg", fr)[1]).decode()
+        body = json.dumps({
+            "contents": [{"parts": [
+                {"text": f"Answer only yes or no. Does this frame show: {query}?"},
+                {"inline_data": {"mime_type": "image/jpeg", "data": b64}},
+            ]}],
+            "generationConfig": {"maxOutputTokens": 5, "temperature": 0.0},
+        }).encode()
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("x-goog-api-key", self.key)
+        try:
+            r = json.loads(urllib.request.urlopen(req, timeout=30).read())
+            txt = r["candidates"][0]["content"]["parts"][0]["text"].strip().lower()
+            ans = txt.startswith("y")
+        except Exception as e:
+            print(f"    [gemini] call failed ({str(e)[:80]}); treating as no")
+            ans = False
+        self._cache[key] = ans
+        return ans
+
+    def quality(self, video, track, ref, picks, queries) -> float:
+        cand = build_routed_index(video, track, self.embedder,
+                                  pick_indices=picks, fill="slerp")
+        agree = 0
+        for q in queries:
+            qv = self.embedder.embed_text([q])[0]
+            ref_top = ref.frame_idx[int(ref.index.search(qv, k=1)[0][0])]
+            cand_top = cand.frame_idx[int(cand.index.search(qv, k=1)[0][0])]
+            if self._yesno(video, ref_top, q) == self._yesno(video, cand_top, q):
+                agree += 1
+        return agree / max(len(queries), 1)
+
+
 def pick_backend(embedder, price_per_call: float, backend: str = "auto") -> Backend:
-    """auto: use Groq if a key is set and the SDK imports, else the CLIP proxy."""
-    want_groq = backend == "groq" or (backend == "auto" and os.environ.get("GROQ_API_KEY"))
-    if want_groq:
+    """auto: use a vision VLM if a key is set, else the CLIP proxy."""
+    if backend == "gemini" or (backend == "auto" and os.environ.get("GEMINI_API_KEY")):
+        try:
+            b = GeminiVisionBackend(embedder, price_per_call)
+            print("[cost_parity] backend = Gemini (live answer parity)")
+            return b
+        except Exception as e:
+            print(f"[cost_parity] Gemini backend unavailable ({e}); falling back")
+    if backend == "groq" or (backend == "auto" and os.environ.get("GROQ_API_KEY")):
         try:
             b = GroqVisionBackend(embedder, price_per_call)
             print("[cost_parity] backend = Groq Llama-Vision (live answer parity)")
@@ -298,8 +369,8 @@ def main() -> None:
     ap.add_argument("--stride", type=int, default=1)
     ap.add_argument("--max-frames", type=int, default=800)
     ap.add_argument("--weights", default="default")
-    ap.add_argument("--backend", default="auto", choices=["auto", "clip", "groq"],
-                    help="auto = Groq if GROQ_API_KEY set else CLIP proxy")
+    ap.add_argument("--backend", default="auto", choices=["auto", "clip", "groq", "gemini"],
+                    help="auto = Gemini/Groq if a key is set else CLIP proxy")
     ap.add_argument("--out", default="")
     a = ap.parse_args()
 
