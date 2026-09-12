@@ -60,6 +60,7 @@ class FrameSignals:
     struct_delta: float = 0.0
     global_motion_mag: float = 0.0
     motion_residual: float = 0.0
+    region_residual: float = 0.0  # largest motion-compensated change in ANY tile
 
     novelty: float = 0.0          # fused, in [0, 1]
     cost_ms: float = 0.0          # measured, per frame
@@ -154,11 +155,22 @@ class SignalExtractor:
         estimate_camera_motion: bool = True,
         max_track_points: int = 120,
         ema_alpha: float = 0.05,
+        region_grid: int = 4,
+        region_gain: float = 0.6,
     ):
         self.pw, self.ph = int(proc_width), int(proc_height)
         self.estimate_camera_motion = bool(estimate_camera_motion)
         self.max_track_points = int(max_track_points)
         self.ema_alpha = float(ema_alpha)
+        # Region-aware detection: split each frame into region_grid x region_grid
+        # tiles and track the change in the BUSIEST tile, not the frame average.
+        # A small object appearing in one corner barely moves the whole-frame
+        # signal but spikes its own tile. region_gain scales how strongly a
+        # full single-tile change lifts novelty. Set region_grid=1 to disable.
+        self.region_grid = max(1, int(region_grid))
+        self.region_gain = float(region_gain)
+        self._region_mu, self._region_sd = 0.0, 1e-6
+        self._n_region = 0
 
         if isinstance(weights, str):
             if weights not in self.WEIGHT_PRESETS:
@@ -225,11 +237,13 @@ class SignalExtractor:
 
         # --- camera motion and residual content change ---
         if self._prev_gray is not None:
-            gm, resid = self._motion(self._prev_gray, gray)
+            gm, resid, region_resid = self._motion(self._prev_gray, gray)
             sig.global_motion_mag = gm
             sig.motion_residual = resid
+            sig.region_residual = region_resid
         elif self._prev_gray is None:
             sig.motion_residual = 0.0
+            sig.region_residual = 0.0
 
         # --- fuse ---
         sig.novelty = self._fuse(sig)
@@ -291,20 +305,44 @@ class SignalExtractor:
         gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
         return float(np.mean(np.sqrt(gx * gx + gy * gy))) / 255.0
 
-    def _motion(self, prev_gray: np.ndarray, gray: np.ndarray) -> Tuple[float, float]:
+    def _region_max(self, core: np.ndarray) -> float:
         """
-        Returns (global_motion_magnitude_px, motion_residual_0_1).
+        Largest mean absolute difference in any grid tile of the (already
+        motion-compensated, border-trimmed) diff, in [0,1]. This is what makes
+        a small localized change visible: the frame average may be tiny while
+        one tile is large. Cheap -- G*G means on a ~150x86 array.
+        """
+        g = self.region_grid
+        if g <= 1 or core.size == 0:
+            return float(np.mean(core)) / 255.0
+        h, w = core.shape[:2]
+        rs = np.linspace(0, h, g + 1, dtype=int)
+        cs = np.linspace(0, w, g + 1, dtype=int)
+        best = 0.0
+        for i in range(g):
+            for j in range(g):
+                tile = core[rs[i]:rs[i + 1], cs[j]:cs[j + 1]]
+                if tile.size:
+                    m = float(np.mean(tile))
+                    if m > best:
+                        best = m
+        return best / 255.0
+
+    def _motion(self, prev_gray: np.ndarray, gray: np.ndarray) -> Tuple[float, float, float]:
+        """
+        Returns (global_motion_magnitude_px, motion_residual_0_1, region_residual_0_1).
 
         Estimates a partial affine (translation + rotation + uniform scale)
         between the two small frames using sparse LK flow, warps the previous
         frame by it, and measures what is left over. What is left over is
-        content change that camera motion does not explain.
+        content change that camera motion does not explain. region_residual is
+        the same leftover, but measured in the single busiest tile rather than
+        averaged over the whole frame.
         """
         if not self.estimate_camera_motion:
-            resid = float(
-                np.mean(np.abs(gray.astype(np.float32) - prev_gray.astype(np.float32)))
-            ) / 255.0
-            return 0.0, resid
+            diff = np.abs(gray.astype(np.float32) - prev_gray.astype(np.float32))
+            resid = float(np.mean(diff)) / 255.0
+            return 0.0, resid, self._region_max(diff)
 
         global_mag = 0.0
         warped = None
@@ -347,8 +385,9 @@ class SignalExtractor:
         m = max(2, min(gray.shape) // 12)
         core = diff[m:-m, m:-m] if diff.shape[0] > 2 * m and diff.shape[1] > 2 * m else diff
         resid = float(np.mean(core)) / 255.0
+        region_resid = self._region_max(core)
 
-        return global_mag, resid
+        return global_mag, resid, region_resid
 
     def _fuse(self, sig: FrameSignals) -> float:
         w = self.weights
@@ -358,7 +397,16 @@ class SignalExtractor:
             + w.get("struct", 0.0) * sig.struct_delta
             + w.get("residual", 0.0) * self._standardize_residual(sig.motion_residual)
         )
-        return float(np.clip(raw, 0.0, 1.0))
+        base = float(np.clip(raw, 0.0, 1.0))
+
+        # Region-aware floor: a strong change confined to one tile lifts
+        # novelty even when the whole-frame fusion stays low. Uses max(), so
+        # it can only INCREASE sensitivity -- we never skip a frame we would
+        # have caught before, we only catch additional localized events.
+        if self.region_grid > 1:
+            region = self.region_gain * self._standardize_region(sig.region_residual)
+            return float(np.clip(max(base, region), 0.0, 1.0))
+        return base
 
     # A residual below this is indistinguishable from sensor noise, whatever
     # the running statistics say. Expressed as mean absolute luma difference
@@ -393,6 +441,26 @@ class SignalExtractor:
         # absolute: is the change big enough to be real at all?
         absolute = float(np.clip(r / self.ABS_NOISE_FLOOR, 0.0, 1.0))
 
+        return relative * absolute
+
+    def _standardize_region(self, r: float) -> float:
+        """
+        Same relative-times-absolute standardization as the global residual,
+        but with the tile signal's own running statistics. A single tile is
+        noisier than the frame average, so the absolute noise gate matters
+        even more here: it is what stops one flickering tile of a static
+        night scene from firing a false event.
+        """
+        self._n_region += 1
+        a = self.ema_alpha if self._n_region > 30 else 0.2
+        self._region_mu = (1 - a) * self._region_mu + a * r
+        dev = abs(r - self._region_mu)
+        self._region_sd = (1 - a) * self._region_sd + a * dev
+
+        sd = max(self._region_sd, 1e-4)
+        z = (r - self._region_mu) / sd
+        relative = float(np.clip(z / 3.0, 0.0, 1.0)) if z > 0 else 0.0
+        absolute = float(np.clip(r / self.ABS_NOISE_FLOOR, 0.0, 1.0))
         return relative * absolute
 
 
