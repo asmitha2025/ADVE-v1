@@ -22,6 +22,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from adve.api.auth import APIKeyAuthMiddleware, APIKeyStore
+from adve.api.rate_limiter import RateLimiterMiddleware
+DATA_DIR = os.environ.get("ADVE_DATA_DIR", "adve_v2/data")
+key_store = APIKeyStore(os.path.join(DATA_DIR, "auth.db"))
+app.add_middleware(APIKeyAuthMiddleware, key_store=key_store)
+app.add_middleware(RateLimiterMiddleware, requests_per_minute=100)
+
 # Global state
 import functools
 from adve.search.index import ADVESearchIndex
@@ -268,6 +275,16 @@ def index_video_task(
     with pipeline_lock:
         pipeline.reset()
         
+    # Auto-transcode & normalize video inputs (4K, HEVC, High FPS)
+    try:
+        from adve.core.transcoder import VideoTranscoder
+        transcoder = VideoTranscoder(max_width=1280, max_height=720, target_fps=30)
+        video_path, was_transcoded = transcoder.transcode_if_needed(video_path)
+        if was_transcoded:
+            print(f"[API Task] Uploaded video auto-transcoded to: {video_path}")
+    except Exception as transcode_err:
+        print(f"[API Task] Warning: Transcoder probe skipped ({transcode_err})")
+
     cap      = cv2.VideoCapture(video_path)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
     fps      = cap.get(cv2.CAP_PROP_FPS) or 30
@@ -1389,9 +1406,162 @@ async def get_sports_highlights(video_id: str):
     return FileResponse(highlights_path, media_type="video/mp4")
 
 
+# ── Enterprise v3.1 Endpoints ───────────────────────────────────────────────
+
+from fastapi import Header
+from adve.api.license import validate_license_key
+
+class EmbedRequest(BaseModel):
+    video_path: str
+    index_name: Optional[str] = "main_index"
+    max_frames: Optional[int] = 500
+
+@app.get("/health")
+@app.get("/api/v1/health")
 @app.get("/v1/health")
-async def health():
-    return {"status": "ok", "timestamp": time.time()}
+async def health(response: Response):
+    import shutil
+    import torch
+    from fastapi import status
+
+    cuda_ok = torch.cuda.is_available()
+    cuda_responsive = False
+    if cuda_ok:
+        try:
+            _ = torch.zeros(1).cuda()
+            cuda_responsive = True
+        except Exception:
+            cuda_responsive = False
+
+    # Check Vector DB / Metadata DB ping
+    db_ok = False
+    try:
+        if search_index and search_index.db:
+            cursor = search_index.db.cursor()
+            cursor.execute("SELECT 1")
+            db_ok = (cursor.fetchone()[0] == 1)
+    except Exception:
+        db_ok = False
+
+    # Check free disk space (> 2GB free)
+    disk_free_gb = 0.0
+    try:
+        total, used, free = shutil.disk_usage(DATA_DIR)
+        disk_free_gb = free / (1024 ** 3)
+    except Exception:
+        disk_free_gb = 10.0
+
+    disk_ok = disk_free_gb >= 2.0
+    all_healthy = db_ok and disk_ok
+
+    status_str = "healthy" if all_healthy else "degraded"
+    if not all_healthy:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    return {
+        "status": status_str,
+        "version": "3.1.0",
+        "timestamp": time.time(),
+        "subsystems": {
+            "cuda_available": cuda_ok,
+            "cuda_responsive": cuda_responsive,
+            "metadata_db_ping": db_ok,
+            "disk_free_gb": round(disk_free_gb, 2),
+            "disk_healthy": disk_ok
+        }
+    }
+
+@app.post("/api/v1/license/validate")
+async def api_validate_license(x_license_key: Optional[str] = Header(None)):
+    result = validate_license_key(x_license_key)
+    if not result["valid"]:
+        raise HTTPException(status_code=result.get("status_code", 401), detail=result["error"])
+    return result
+
+@app.post("/api/v1/embed")
+async def embed_video_endpoint(
+    request: EmbedRequest,
+    x_license_key: Optional[str] = Header(None)
+):
+    """
+    Enterprise Video Processing Endpoint.
+    Runs ADVEEnterprisePipeline to extract features, evaluate similarity, and calculate encoder savings.
+    """
+    lic_res = validate_license_key(x_license_key)
+    if not lic_res["valid"]:
+        raise HTTPException(status_code=lic_res.get("status_code", 401), detail=lic_res["error"])
+
+    video_file = request.video_path
+    if not os.path.exists(video_file):
+        # Check relative to uploads or data directory
+        for candidate_dir in [UPLOADS_DIR, DATA_DIR, "/data", "adve_v2/data"]:
+            cand = os.path.join(candidate_dir, os.path.basename(video_file))
+            if os.path.exists(cand):
+                video_file = cand
+                break
+
+    if not os.path.exists(video_file):
+        raise HTTPException(status_code=404, detail=f"Video path '{request.video_path}' not found on server.")
+
+    start_time = time.time()
+    try:
+        import torch
+        from adve.core.pipeline_enterprise import ADVEEnterprisePipeline
+        device = "cuda" if (torch.cuda.is_available() and torch.cuda.device_count() > 0) else "cpu"
+        
+        try:
+            pipeline = ADVEEnterprisePipeline(
+                reconstructor_path='training/checkpoints/reconstructor_v3.pt',
+                device=device,
+                use_ego_motion=True,
+                use_ema=True
+            )
+        except Exception as err:
+            if device == "cuda":
+                print(f"[API Warning] CUDA initialization failed ({err}), falling back to CPU...")
+                device = "cpu"
+                pipeline = ADVEEnterprisePipeline(
+                    reconstructor_path='training/checkpoints/reconstructor_v3.pt',
+                    device=device,
+                    use_ego_motion=True,
+                    use_ema=True
+                )
+            else:
+                raise err
+
+        res = pipeline.process_video(
+            video_file,
+            max_frames=request.max_frames or 500,
+            no_validation=False
+        )
+
+        recs = pipeline.validator.records
+        sims = [r['cosine_sim'] for r in recs] if recs else [0.0]
+
+        import numpy as np
+        mean_sim = float(np.mean(sims))
+        min_sim = float(np.min(sims))
+        proc_time = round(time.time() - start_time, 2)
+        fps = round(float(res.get("effective_fps", 0.0)), 1)
+        savings = float(res.get("encoder_savings_pct", 0.0))
+
+        return {
+            "status": "success",
+            "video_path": request.video_path,
+            "index_name": request.index_name,
+            "total_frames": len(sims),
+            "mean_cos_sim": round(mean_sim, 4),
+            "min_cos_sim": round(min_sim, 4),
+            "encoder_savings_pct": round(savings, 1),
+            "effective_fps": fps,
+            "processing_time_sec": proc_time,
+            "license": {
+                "client": lic_res["client"],
+                "tier": lic_res["tier"]
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline execution error: {str(e)}")
 
 
 def run():
@@ -1400,3 +1570,4 @@ def run():
 
 if __name__ == "__main__":
     run()
+

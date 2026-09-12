@@ -25,7 +25,7 @@ class ADVEEnterprisePipeline:
       4. Clamped GRU Memory Reconstructor v3.
     """
 
-    def __init__(self, config: Optional[Config] = None, reconstructor_path: Optional[str] = None, device: str = "cuda", use_ego_motion: bool = True, use_ema: bool = True, ema_alpha: float = 0.65):
+    def __init__(self, config: Optional[Config] = None, reconstructor_path: Optional[str] = None, device: str = "cuda", use_ego_motion: bool = True, use_ema: bool = True, ema_alpha: float = 0.75):
         self.config = config or Config()
         self.device = device if torch.cuda.is_available() and device == "cuda" else "cpu"
         self.config.DEVICE = self.device
@@ -57,6 +57,7 @@ class ADVEEnterprisePipeline:
         self.reset_state()
 
     def reset_state(self):
+        import gc
         self.anchor_frame = None
         self.anchor_graph = None
         self.anchor_embedding = None
@@ -65,10 +66,16 @@ class ADVEEnterprisePipeline:
         self.frames_since_anchor = 0
         self.force_refresh = False
         self.validator.records.clear()
+        if hasattr(self, "ego_estimator") and self.ego_estimator is not None:
+            self.ego_estimator.reset()
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def _is_image_blurred(self, frame: np.ndarray, blur_threshold: float = 40.0) -> bool:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame
-        var = cv2.Laplacian(gray, cv2.CV_64F).var()
+        small = cv2.resize(gray, (320, 180), interpolation=cv2.INTER_NEAREST)
+        var = cv2.Laplacian(small, cv2.CV_16S).var()
         return var < blur_threshold
 
     def process_frame(self, frame: np.ndarray, frame_idx: int, no_validation: bool = True) -> Dict[str, Any]:
@@ -83,19 +90,15 @@ class ADVEEnterprisePipeline:
         is_blurred = self._is_image_blurred(frame)
 
         # 2. Forced Refresh or Initial Anchor
-        if self.anchor_graph is None or self.force_refresh or is_blurred or self.frames_since_anchor >= 30:
+        if self.anchor_graph is None or self.force_refresh or is_blurred or self.frames_since_anchor >= self.config.MAX_DELTA_FRAMES:
             refresh = True
             self.force_refresh = False
         else:
             # Estimate Homography if Ego-Motion Compensation is enabled
-            H = self.ego_estimator.estimate_homography(frame) if self.use_ego_motion else None
+            H = self.ego_estimator.estimate_homography(self.anchor_frame) if (self.use_ego_motion and self.anchor_frame is not None) else None
 
-            # Track objects via YOLO
+            # Track objects via YOLO (tracker.py handles ego-motion warping via homography)
             current_graph, delta = self.delta_tracker.track(frame, self.anchor_graph, homography=H)
-
-            # Warp centroids to cancel camera pan
-            if H is not None and current_graph is not None:
-                current_graph.objects = self.ego_estimator.warp_centroids(current_graph.objects, H)
 
             delta_magnitude = delta["total_magnitude"]
 
@@ -105,10 +108,10 @@ class ADVEEnterprisePipeline:
         # 3. Execution Path
         if refresh:
             # ── ANCHOR FRAME ──
-            self.anchor_frame = frame.copy()
+            self.anchor_frame = cv2.resize(frame, (320, 180), interpolation=cv2.INTER_AREA)
             self.anchor_graph, self.anchor_embedding = self.anchor_proc.process(frame)
             if self.use_ego_motion:
-                self.ego_estimator.set_anchor_frame(frame)
+                self.ego_estimator.set_anchor_frame(self.anchor_frame)
 
             self.frames_since_anchor = 0
             self.hidden_state = None  # Reset GRU state on anchor refresh
@@ -158,6 +161,39 @@ class ADVEEnterprisePipeline:
             "frame_idx": frame_idx
         }
 
+    def _appearance_delta(self, f1: Optional[np.ndarray], f2: Optional[np.ndarray]) -> float:
+        """Fast histogram-based appearance change score."""
+        if f1 is None or f2 is None or f1.size == 0 or f2.size == 0:
+            return 0.0
+        try:
+            f1_small = cv2.resize(f1, (64, 64))
+            f2_small = cv2.resize(f2, (64, 64))
+            h1 = cv2.calcHist([f1_small], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
+            h2 = cv2.calcHist([f2_small], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
+            cv2.normalize(h1, h1)
+            cv2.normalize(h2, h2)
+            corr = cv2.compareHist(h1.flatten(), h2.flatten(), cv2.HISTCMP_CORREL)
+            return float(1.0 - corr)
+        except Exception:
+            return 0.0
+
+    def _frame_structure_delta(self, anchor_frame: Optional[np.ndarray], current_frame: Optional[np.ndarray]) -> float:
+        """
+        Computes structural scene change using resized grayscale MSE.
+        Catches camera pan and background shifts that color histograms miss.
+        """
+        if anchor_frame is None or current_frame is None or anchor_frame.size == 0 or current_frame.size == 0:
+            return 0.0
+        try:
+            a = cv2.resize(anchor_frame, (64, 64))
+            c = cv2.resize(current_frame, (64, 64))
+            a_gray = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY).astype(np.float32)
+            c_gray = cv2.cvtColor(c, cv2.COLOR_BGR2GRAY).astype(np.float32)
+            mse = float(np.mean((a_gray - c_gray) ** 2))
+            return min(mse / 255.0, 1.0)
+        except Exception:
+            return 0.0
+
     def _evaluate_gating(self, current_graph, delta, delta_magnitude: float, frame: np.ndarray) -> bool:
         """Evaluates 9 enterprise gating conditions for anchor refresh."""
         if current_graph is None:
@@ -174,13 +210,30 @@ class ADVEEnterprisePipeline:
         if abs(n_curr - n_anchor) >= 2:
             return True
 
-        # Factor C: Spatial Delta Threshold (dG > 0.25)
-        if delta_magnitude > 0.25:
+        # Factor C: Spatial Delta Threshold (dG > SPATIAL_THRESHOLD)
+        if delta_magnitude > self.config.SPATIAL_THRESHOLD:
             return True
 
-        # Factor D: New / Lost Object Disruption
-        if len(delta.get("new_objects", [])) > 1 or len(delta.get("lost_objects", [])) > 1:
+        # Factor D: New / Lost Object Disruption (any new object must trigger anchor to generate its embedding)
+        if len(delta.get("new_objects", [])) > 0 or len(delta.get("lost_objects", [])) > 1:
             return True
+
+        # Factor E: Appearance / Color Histogram Change (hist correlation drop > APPEARANCE_THRESHOLD)
+        if self.anchor_frame is not None:
+            app_delta = self._appearance_delta(self.anchor_frame, frame)
+            if app_delta > self.config.APPEARANCE_THRESHOLD:
+                return True
+
+        # Factor H (Revised): Empty/Sparse Scene Structure Drift
+        # When we have 0-1 objects, spatial graph is useless. Use frame structure.
+        if n_curr <= 1 and self.frames_since_anchor >= 2:
+            struct_delta = self._frame_structure_delta(self.anchor_frame, frame)
+            if struct_delta > 0.05:  # 5% pixel variance = scene changed significantly
+                return True
+
+        # Factor I: Hard cap for empty scenes (absolute safety net)
+        if n_curr == 0 and self.frames_since_anchor >= 3:
+            return True  # Never reconstruct more than 3 frames in empty scenes
 
         return False
 
@@ -199,6 +252,8 @@ class ADVEEnterprisePipeline:
             ret, frame = cap.read()
             if not ret or frame is None:
                 break
+            if frame.shape[0] > 360:
+                frame = cv2.resize(frame, (640, 360), interpolation=cv2.INTER_AREA)
 
             self.process_frame(frame, frame_idx, no_validation=no_validation)
             frame_idx += 1

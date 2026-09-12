@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: adve-api
+    restart: always
+    runtime: nvidia
+    environment:
+      - ADVE_LICENSE_KEY=${ADVE_LICENSE_KEY}
+      - ADVE_ANCHOR_BUDGET=20
+      - ADVE_SPATIAL_THRESHOLD=0.35
+      - ADVE_REDIS_URL=redis://redis:6379/0
+      - ADVE_VECTOR_DB_TYPE=qdrant
+      - ADVE_QDRANT_URL=http://qdrant:6333
+      - CUDA_VISIBLE_DEVICES=0
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../outputs:/app/outputs
+      - ../models:/app/models:ro
+    depends_on:
+      - redis
+      - qdrant
+
+  celery_worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: adve-worker
+    restart: always
+    runtime: nvidia
+    command: celery -A worker.celery_app worker --loglevel=info
+    environment:
+      - ADVE_REDIS_URL=redis://redis:6379/0
+      - ADVE_VECTOR_DB_TYPE=qdrant
+      - ADVE_QDRANT_URL=http://qdrant:6333
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      - ../outputs:/app/outputs
+      - ../models:/app/models:ro
+    depends_on:
+      - redis
+      - qdrant
+
+  redis:
+    image: redis:7-alpine
+    container_name: adve-redis
+    ports:
+      - "6379:6379"
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: adve-qdrant
+    restart: always
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ../qdrant_data:/qdrant/storage

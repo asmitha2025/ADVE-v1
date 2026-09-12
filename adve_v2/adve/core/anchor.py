@@ -69,7 +69,7 @@ class AnchorProcessor:
             print(f"[AnchorProcessor] Loading YOLO model '{self.config.YOLO_MODEL}' on {device}...")
             self._yolo = YOLO(self.config.YOLO_MODEL)
             self._yolo.to(device)
-            if device != "cpu":
+            if device != "cpu" and getattr(self.config, "YOLO_HALF", False):
                 self._yolo.model.half()
         return self._yolo
 
@@ -141,7 +141,8 @@ class AnchorProcessor:
                 "bbox": (x1, y1, x2, y2),
                 "roi_small": roi_small,
                 "area": float((x2 - x1) * (y2 - y1)),
-                "center": ((x1 + x2) / 2.0, (y1 + y2) / 2.0)
+                "center": ((x1 + x2) / 2.0, (y1 + y2) / 2.0),
+                "confidence": float(box.conf[0].cpu().numpy()) if box.conf is not None else 1.0
             })
 
         # Run a single batch CLIP forward pass!
@@ -166,6 +167,7 @@ class AnchorProcessor:
                 area=info["area"],
                 embedding=obj_embedding,
                 appearance_hist=hist,
+                confidence=info["confidence"],
             ))
 
         graph.build_relations(frame.shape[1], frame.shape[0])
@@ -191,7 +193,8 @@ class AnchorProcessor:
         pil_img = Image.fromarray(rgb)
 
         with torch.no_grad():
-            tensor = self.clip_preprocess(pil_img).unsqueeze(0).to(self.device)
+            model_device = next(self.clip_model.parameters()).device
+            tensor = self.clip_preprocess(pil_img).unsqueeze(0).to(model_device)
             emb    = self.clip_model.encode_image(tensor)
             emb    = emb / emb.norm(dim=-1, keepdim=True)
 

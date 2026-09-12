@@ -71,10 +71,11 @@ class ADVESearchIndex:
         else:
             self.faiss_index = faiss.IndexFlatIP(dim)
 
-        # SQLite for metadata
+        # SQLite for metadata with WAL mode & 30s timeout for concurrent safety
         self.db = sqlite3.connect(
-            str(self.index_dir / "metadata.db"), check_same_thread=False
+            str(self.index_dir / "metadata.db"), check_same_thread=False, timeout=30.0
         )
+        self.db.execute("PRAGMA journal_mode=WAL;")
         self._init_db()
 
         # Load CLIP for text queries
@@ -144,8 +145,12 @@ class ADVESearchIndex:
         """Batch insert for efficiency."""
         if not records:
             return
-        embeddings = np.array(
-            [r["embedding"] for r in records], dtype=np.float32
+        # Flatten each embedding to a 1-D (dim,) vector before stacking. The
+        # pipeline emits anchor embeddings as (dim,) but reconstructed delta
+        # embeddings as (1, dim); stacking the two shapes directly raises a
+        # numpy "inhomogeneous shape" ValueError and aborts indexing.
+        embeddings = np.stack(
+            [np.asarray(r["embedding"], dtype=np.float32).reshape(-1) for r in records]
         )
         # Normalize
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)

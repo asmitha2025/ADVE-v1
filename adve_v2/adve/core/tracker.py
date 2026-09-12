@@ -83,6 +83,8 @@ class DeltaTracker:
                     except Exception:
                         pass
 
+                conf = float(box.conf[0].cpu().numpy()) if box.conf is not None else 1.0
+
                 current.add_object(ObjectState(
                     obj_id=obj_id,
                     class_name=class_name,
@@ -90,6 +92,7 @@ class DeltaTracker:
                     center=center,
                     area=float((x2 - x1) * (y2 - y1)),
                     embedding=embedding,
+                    confidence=conf,
                 ))
 
         current.build_relations(frame.shape[1], frame.shape[0])

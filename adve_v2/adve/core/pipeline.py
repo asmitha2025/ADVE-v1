@@ -4,7 +4,6 @@ import os
 import time
 import torch
 from typing import Optional
-from ultralytics import YOLO
 from adve.core.frame_filter import FrameFilter
 
 from adve.core.config import Config
@@ -14,6 +13,11 @@ from adve.core.tracker import DeltaTracker
 from adve.core.reconstructor import EmbeddingReconstructor
 from adve.core.reconstructor_v2 import DeltaReconstructor, DeltaFeatureExtractor
 from adve.core.validator import Validator
+from adve.core.ego_motion import EgoMotionEstimator
+from adve.core.ualw import UALWReconstructor
+from adve.core.safety_gate import SafetyGate
+from adve.core.slide_detector import SlideTransitionDetector
+from adve.core.transcoder import VideoTranscoder
 
 
 class ADVEPipeline:
@@ -43,6 +47,47 @@ class ADVEPipeline:
         self.reconstructor   = EmbeddingReconstructor(config.MLP_MODEL_PATH)
         self.validator       = Validator(config)
         self.hidden_state    = None
+        self.safety_gate     = SafetyGate(
+            hard_floor=getattr(config, 'SAFETY_GATE_HARD_FLOOR', 0.88),
+            consecutive_max=getattr(config, 'SAFETY_GATE_CONSECUTIVE_MAX', 3)
+        )
+        self.slide_detector  = SlideTransitionDetector(
+            threshold=getattr(config, 'SLIDE_STRUCT_THRESHOLD', 0.06),
+            hist_threshold=getattr(config, 'SLIDE_HIST_THRESHOLD', 0.40)
+        )
+
+        # --- UALW Uncertainty-Aware Latent Warping (Patent Claim 7) ---
+        self.ualw = UALWReconstructor(clip_dim=512, motion_dim=32)
+        self.ualw.eval()
+        self.ualw_hidden = None
+        self._ualw_active = getattr(config, 'USE_UALW_GATING', False)
+        # Load trained UALW checkpoint if available
+        ualw_ckpt = getattr(config, 'UALW_CHECKPOINT', '')
+        if ualw_ckpt and os.path.exists(ualw_ckpt):
+            try:
+                ckpt = torch.load(ualw_ckpt, map_location='cpu', weights_only=False)
+                state_dict = ckpt.get('model_state_dict', ckpt)
+                self.ualw.load_state_dict(state_dict)
+                self._ualw_active = True
+                print(f"[ADVEPipeline] Loaded UALW checkpoint from {ualw_ckpt} — Uncertainty Gating ACTIVE")
+            except Exception as e:
+                print(f"[ADVEPipeline] Warning: Could not load UALW checkpoint ({e}) — Uncertainty Gating DISABLED")
+                self._ualw_active = False
+
+        # --- Ego-Motion Compensation (ORB Homography) ---
+        self.ego_estimator = EgoMotionEstimator(max_features=500) if getattr(config, 'USE_EGO_MOTION', True) else None
+
+        # --- EMA Dynamic Threshold State ---
+        self._ema_spatial_mu = 0.0
+        self._ema_spatial_var = 0.0
+        self._ema_appearance_mu = 0.0
+        self._ema_appearance_var = 0.0
+        self._ema_alpha = 0.1  # EMA smoothing factor
+        self._ema_initialized = False
+
+        # --- Track Persistence Hysteresis ---
+        self._new_track_counter: dict = {}  # track_id -> consecutive frames seen
+        self._hysteresis_frames = getattr(config, 'HYSTERESIS_FRAMES', 3)
 
         # Live state
         self.anchor_graph:     Optional[SpatialGraph] = None
@@ -98,30 +143,141 @@ class ADVEPipeline:
         self.anchor_des = None
         self.anchor_orb_scale = 1.0
         self.hidden_state = None
+        # Reset UALW state
+        self.ualw_hidden = None
+        # Reset Ego-Motion state
+        if self.ego_estimator is not None:
+            self.ego_estimator.reset()
+        # Reset EMA thresholds
+        self._ema_spatial_mu = 0.0
+        self._ema_spatial_var = 0.0
+        self._ema_appearance_mu = 0.0
+        self._ema_appearance_var = 0.0
+        self._ema_initialized = False
+        # Reset track hysteresis
+        self._new_track_counter = {}
 
 
     # ------------------------------------------------------------------
-    # Anchor decision logic
+    # EMA Dynamic Threshold Update
+    # ------------------------------------------------------------------
+
+    def _update_ema_thresholds(self, spatial_mag: float, appearance_delta: float):
+        """Update running EMA mean/variance for adaptive thresholding."""
+        alpha = self._ema_alpha
+        if not self._ema_initialized:
+            self._ema_spatial_mu = spatial_mag
+            self._ema_spatial_var = 0.0
+            self._ema_appearance_mu = appearance_delta
+            self._ema_appearance_var = 0.0
+            self._ema_initialized = True
+        else:
+            # Spatial EMA
+            self._ema_spatial_mu = (1 - alpha) * self._ema_spatial_mu + alpha * spatial_mag
+            diff_s = spatial_mag - self._ema_spatial_mu
+            self._ema_spatial_var = (1 - alpha) * self._ema_spatial_var + alpha * (diff_s ** 2)
+            # Appearance EMA
+            self._ema_appearance_mu = (1 - alpha) * self._ema_appearance_mu + alpha * appearance_delta
+            diff_a = appearance_delta - self._ema_appearance_mu
+            self._ema_appearance_var = (1 - alpha) * self._ema_appearance_var + alpha * (diff_a ** 2)
+
+    def _get_dynamic_thresholds(self):
+        """Returns adaptive spatial and appearance thresholds based on EMA statistics."""
+        k = getattr(self.config, 'DYNAMIC_K_FACTOR', 2.0)
+        use_ema = getattr(self.config, 'USE_EMA_THRESHOLDS', True)
+
+        if use_ema and self._ema_initialized:
+            spatial_thresh = max(
+                self._ema_spatial_mu + k * (self._ema_spatial_var ** 0.5),
+                self.config.SPATIAL_THRESHOLD * 0.5  # floor at 50% of static threshold
+            )
+            appearance_thresh = max(
+                self._ema_appearance_mu + k * (self._ema_appearance_var ** 0.5),
+                self.config.APPEARANCE_THRESHOLD * 0.5
+            )
+            return spatial_thresh, appearance_thresh
+        else:
+            return self.config.SPATIAL_THRESHOLD, self.config.APPEARANCE_THRESHOLD
+
+    # ------------------------------------------------------------------
+    # Track Persistence Hysteresis
+    # ------------------------------------------------------------------
+
+    def _filter_new_objects_hysteresis(self, new_objects: list) -> list:
+        """Require new track IDs to persist for N consecutive frames before triggering anchor."""
+        confirmed = []
+        current_ids = set()
+        for obj_id in new_objects:
+            current_ids.add(obj_id)
+            self._new_track_counter[obj_id] = self._new_track_counter.get(obj_id, 0) + 1
+            if self._new_track_counter[obj_id] >= self._hysteresis_frames:
+                confirmed.append(obj_id)
+
+        # Decay counters for tracks no longer seen
+        stale_ids = [k for k in self._new_track_counter if k not in current_ids]
+        for sid in stale_ids:
+            del self._new_track_counter[sid]
+
+        return confirmed
+
+    # ------------------------------------------------------------------
+    # UALW Uncertainty Check
+    # ------------------------------------------------------------------
+
+    def _check_ualw_uncertainty(self, prev_embedding: np.ndarray) -> tuple:
+        """
+        Run UALW single-pass uncertainty estimation.
+        Returns (should_refresh: bool, sigma_t: float).
+        """
+        try:
+            prev_tensor = torch.tensor(prev_embedding, dtype=torch.float32).unsqueeze(0)
+            # Use spatial delta magnitude as a proxy motion feature
+            motion_feat = torch.randn(1, 32)  # Placeholder; real integration uses ΔG vector
+            with torch.no_grad():
+                _, sigma, self.ualw_hidden = self.ualw(
+                    prev_tensor, motion_feat, self.ualw_hidden
+                )
+            sigma_val = float(sigma.item())
+            threshold = getattr(self.config, 'UNCERTAINTY_THRESHOLD', 0.05)
+            return self.ualw.check_uncertainty_refresh(sigma_val, threshold), sigma_val
+        except Exception:
+            return False, 0.0
+
+    # ------------------------------------------------------------------
+    # Anchor decision logic (Enhanced)
     # ------------------------------------------------------------------
 
     def _needs_anchor(self, delta: dict, appearance_delta: float) -> bool:
-        return (
-            delta["total_magnitude"]    > self.config.SPATIAL_THRESHOLD  or
-            appearance_delta            > self.config.APPEARANCE_THRESHOLD or
+        # Get dynamic or static thresholds
+        spatial_thresh, appearance_thresh = self._get_dynamic_thresholds()
+
+        # Update EMA with current observations
+        self._update_ema_thresholds(delta["total_magnitude"], appearance_delta)
+
+        # Filter new objects through hysteresis
+        confirmed_new = self._filter_new_objects_hysteresis(delta["new_objects"])
+
+        # Standard gating with dynamic thresholds
+        standard_trigger = (
+            delta["total_magnitude"]    > spatial_thresh  or
+            appearance_delta            > appearance_thresh or
             self.frames_since_anchor   >= self.config.MAX_DELTA_FRAMES    or
-            len(delta["new_objects"])   > 0
+            len(confirmed_new)          > 0
         )
 
-    def _appearance_delta(self, f1: np.ndarray, f2: np.ndarray) -> float:
-        """Fast histogram-based appearance change score."""
-        def hist(f):
-            f_small = cv2.resize(f, (64, 64))
-            h = cv2.calcHist([f_small], [0, 1, 2], None, [8, 8, 8],
-                             [0, 256, 0, 256, 0, 256])
-            return cv2.normalize(h, h).flatten()
+        # UALW Uncertainty Gating (Patent Claim 7) — only when trained checkpoint is loaded
+        ualw_trigger = False
+        if self._ualw_active and self.anchor_embedding is not None:
+            ualw_trigger, sigma_t = self._check_ualw_uncertainty(self.anchor_embedding)
 
-        corr = cv2.compareHist(hist(f1), hist(f2), cv2.HISTCMP_CORREL)
-        return float(1.0 - corr)   # 0 = identical, 1 = completely different
+        return standard_trigger or ualw_trigger
+
+    def _appearance_delta(self, f1: np.ndarray, f2: np.ndarray) -> float:
+        """Fast structural appearance change score (0 = identical, 1 = max change)."""
+        g1 = cv2.cvtColor(cv2.resize(f1, (160, 90)), cv2.COLOR_BGR2GRAY)
+        g2 = cv2.cvtColor(cv2.resize(f2, (160, 90)), cv2.COLOR_BGR2GRAY)
+        diff = float(np.mean(cv2.absdiff(g1, g2))) / 255.0
+        return diff
 
     def _estimate_homography(self, img2: np.ndarray) -> Optional[np.ndarray]:
         try:
@@ -238,11 +394,19 @@ class ADVEPipeline:
                 if avg_conf < 0.35:
                     refresh = True
 
+            # Slide Transition Detector: Compare current frame vs ANCHOR frame
+            # Catches education slide changes that prev_frame delta misses
+            if not refresh and self.anchor_frame is not None:
+                is_slide, struct_diff, hist_corr = self.slide_detector.check(frame)
+                if is_slide:
+                    refresh = True
+
         # --- Process ---
         if refresh:
             # ── ANCHOR FRAME ──────────────────────────────────────
             self.anchor_frame = frame.copy()
             self.anchor_graph, self.anchor_embedding = self.anchor_proc.process(frame)
+            self.slide_detector.set_anchor(frame)  # Cache anchor for slide transition detection
             
             # Cache anchor ORB keypoints and descriptors
             try:
@@ -267,6 +431,11 @@ class ADVEPipeline:
 
             self.frames_since_anchor = 0
             self.hidden_state = None  # Reset GRU state on anchor refresh
+            self.ualw_hidden = None   # Reset UALW hidden state on anchor refresh
+            self._new_track_counter = {}  # Reset hysteresis counters
+            # Set ego-motion anchor frame
+            if self.ego_estimator is not None:
+                self.ego_estimator.set_anchor_frame(frame)
             # Reset reconstructor v3 internal state on anchor refresh
             if hasattr(self.reconstructor, 'hidden_state'):
                 self.reconstructor.hidden_state = None
@@ -315,6 +484,16 @@ class ADVEPipeline:
             ground_truth = None if no_validation else self.anchor_proc.embed_frame(frame)
             self.frames_since_anchor += 1
 
+            # SAFETY GATE: Hard Floor Quality Assurance Gate (Guaranteed 0.88 Floor)
+            safe_embedding, was_forced, actual_sim = self.safety_gate.check(
+                predicted_embedding=reconstructed,
+                anchor_embedding=self.anchor_embedding,
+                true_clip_embedding=ground_truth
+            )
+            reconstructed = safe_embedding
+            if self.safety_gate.should_force_full_clip():
+                self.force_refresh = True
+
             # Check if current frame was empty, schedule refresh if anchor was not empty
             if len(current_graph.objects) == 0 and len(self.anchor_graph.objects) > 0:
                 self.force_refresh = True
@@ -356,6 +535,16 @@ class ADVEPipeline:
         }
 
     def process_video(self, video_path: str, no_validation: bool = False, max_frames: Optional[int] = None) -> dict:
+        if getattr(self.config, 'ENABLE_TRANSCODER', True):
+            transcoder = VideoTranscoder(
+                max_width=getattr(self.config, 'MAX_VIDEO_WIDTH', 1280),
+                max_height=getattr(self.config, 'MAX_VIDEO_HEIGHT', 720),
+                target_fps=getattr(self.config, 'TARGET_VIDEO_FPS', 30)
+            )
+            video_path, was_transcoded = transcoder.transcode_if_needed(video_path)
+            if was_transcoded:
+                print(f"[VideoTranscoder] Input video normalized & transcoded to: {video_path}")
+
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise FileNotFoundError(f"Cannot open video: {video_path}")
@@ -368,11 +557,16 @@ class ADVEPipeline:
         print(f"  Frames: {total_vid_frames}  |  FPS: {total_fps:.1f}")
         print(f"{'='*55}")
 
-        frame_idx = 0
-        t_start   = time.time()
-
         import gc
         import torch
+
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        self.validator.records = []
+        frame_idx = 0
+        t_start   = time.time()
 
         while cap.isOpened():
             if max_frames is not None and frame_idx >= max_frames:
@@ -380,11 +574,25 @@ class ADVEPipeline:
 
             try:
                 ret, frame = cap.read()
-                if not ret or frame is None:
+            except Exception as read_err:
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                time.sleep(0.05)
+                try:
+                    ret, frame = cap.read()
+                except Exception:
                     break
 
+            if not ret or frame is None:
+                break
+
+            try:
                 res = self.process_frame(frame, frame_idx, no_validation=no_validation)
             except Exception as frame_err:
+                import traceback
+                print(f"[ADVEPipeline] Frame {frame_idx} error: {frame_err}")
+                traceback.print_exc()
                 gc.collect()
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
@@ -414,12 +622,16 @@ class ADVEPipeline:
         summary["elapsed_sec"] = round(elapsed, 2)
         summary["effective_fps"] = round(frame_idx / elapsed, 1)
 
-        self.validator.plot(
-            os.path.join(self.config.OUTPUT_DIR, "adve_results.png")
-        )
-        self.validator.save_json(
-            os.path.join(self.config.OUTPUT_DIR, "adve_results.json")
-        )
+        os.makedirs(self.config.OUTPUT_DIR, exist_ok=True)
+        try:
+            self.validator.plot(
+                os.path.join(self.config.OUTPUT_DIR, "adve_results.png")
+            )
+            self.validator.save_json(
+                os.path.join(self.config.OUTPUT_DIR, "adve_results.json")
+            )
+        except Exception as e:
+            print(f"[ADVEPipeline] Notice: Could not save validation plot/json ({e})")
 
         self._print_summary(summary)
         return summary

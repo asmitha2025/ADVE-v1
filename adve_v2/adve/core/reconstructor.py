@@ -161,8 +161,10 @@ class EmbeddingReconstructor:
         # Determine clip_dim dynamically
         clip_dim = 512
         if self.model is not None:
-            # Get clip_dim from the output layer
-            clip_dim = self.model.net[-1].out_features
+            if hasattr(self.model, "clip_dim"):
+                clip_dim = self.model.clip_dim
+            elif hasattr(self.model, "net"):
+                clip_dim = self.model.net[-1].out_features
 
         # Resolve rolling anchor buffer blending (Improvement 3)
         if isinstance(anchor_embedding, list):
@@ -198,7 +200,7 @@ class EmbeddingReconstructor:
                     # EMA smoothing
                     prev = getattr(self, "_prev_reconstructed", None)
                     if prev is not None:
-                        ema_alpha = 0.65
+                        ema_alpha = 0.75
                         smoothed = ema_alpha * raw_reconstructed + (1.0 - ema_alpha) * prev
                         smoothed = smoothed / (np.linalg.norm(smoothed) + 1e-8)
                     else:

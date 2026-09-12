@@ -12,6 +12,7 @@ class ObjectState:
     area:       float
     embedding:  Optional[np.ndarray] = None  # None on delta frames
     appearance_hist: Optional[np.ndarray] = None
+    confidence: float = 1.0
 
 
 @dataclass

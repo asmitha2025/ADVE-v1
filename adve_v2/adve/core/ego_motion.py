@@ -19,29 +19,41 @@ class EgoMotionEstimator:
         self.anchor_kp = None
         self.anchor_des = None
 
+    def reset(self):
+        self.anchor_kp = None
+        self.anchor_des = None
+
     def set_anchor_frame(self, frame: np.ndarray):
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame
-        self.anchor_kp, self.anchor_des = self.orb.detectAndCompute(gray, None)
+        try:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame
+            gray_small = cv2.resize(gray, (320, 180), interpolation=cv2.INTER_AREA)
+            self.anchor_kp, self.anchor_des = self.orb.detectAndCompute(gray_small, None)
+        except Exception:
+            self.anchor_kp, self.anchor_des = None, None
 
     def estimate_homography(self, current_frame: np.ndarray) -> Optional[np.ndarray]:
-        if self.anchor_des is None or len(self.anchor_kp) < 10:
+        try:
+            if self.anchor_des is None or self.anchor_kp is None or len(self.anchor_kp) < 10:
+                return None
+
+            gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY) if current_frame.ndim == 3 else current_frame
+            gray_small = cv2.resize(gray, (320, 180), interpolation=cv2.INTER_AREA)
+            kp2, des2 = self.orb.detectAndCompute(gray_small, None)
+
+            if des2 is None or len(kp2) < 10:
+                return None
+
+            matches = self.bf.match(self.anchor_des, des2)
+            if len(matches) < self.match_threshold:
+                return None
+
+            src_pts = np.float32([self.anchor_kp[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
+            dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
+
+            H, mask = cv2.findHomography(dst_pts, src_pts, cv2.RANSAC, 5.0)
+            return H
+        except Exception:
             return None
-
-        gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY) if current_frame.ndim == 3 else current_frame
-        kp2, des2 = self.orb.detectAndCompute(gray, None)
-
-        if des2 is None or len(kp2) < 10:
-            return None
-
-        matches = self.bf.match(self.anchor_des, des2)
-        if len(matches) < self.match_threshold:
-            return None
-
-        src_pts = np.float32([self.anchor_kp[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
-        dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
-
-        H, mask = cv2.findHomography(dst_pts, src_pts, cv2.RANSAC, 5.0)
-        return H
 
     def warp_centroids(self, objects: Dict[str, Any], H: Optional[np.ndarray]) -> Dict[str, Any]:
         """Apply inverse homography warp to bounding box centroids to cancel ego-motion."""

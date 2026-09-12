@@ -131,7 +131,11 @@ class Validator:
         axes[2].legend(fontsize=8)
 
         plt.tight_layout()
-        plt.savefig(out_path, dpi=150, bbox_inches="tight")
+        try:
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            plt.savefig(out_path, dpi=150, bbox_inches="tight")
+        except Exception:
+            pass
         plt.close()
 
     # ------------------------------------------------------------------

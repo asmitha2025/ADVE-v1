@@ -63,7 +63,10 @@ def test_app(tmp_path, monkeypatch):
         
     init_users_db()
     
-    with TestClient(app) as client:
+    # Authenticate the client with the built-in dev key so protected data
+    # endpoints (stats, search, frame) pass the APIKeyAuthMiddleware. Public
+    # endpoints (health, register) work with or without it.
+    with TestClient(app, headers={"X-API-Key": "adve-dev-key-2026"}) as client:
         yield client, server
 
 
@@ -73,7 +76,8 @@ def test_health_check(test_app):
     response = client.get("/v1/health")
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "ok"
+    # v3.1 health handler reports "healthy" / "degraded" (not the legacy "ok")
+    assert data["status"] in ("ok", "healthy", "degraded")
     assert "timestamp" in data
 
 
