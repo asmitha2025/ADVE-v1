@@ -29,3 +29,8 @@ adve_v2/demo_previews/
 adve_v2/demo_videos/
 adve_v2/clips/
 
+
+# Python packaging build artifacts
+*.egg-info/
+build/
+dist/

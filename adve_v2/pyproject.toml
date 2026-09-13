@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frameroute"
+version = "0.1.0"
+description = "Budget-constrained frame selection for video AI pipelines — sample in change, not in time."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Asmitha" }]
+keywords = [
+    "video", "frame selection", "sampling", "VLM", "CLIP",
+    "video RAG", "cost optimization", "change detection",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Multimedia :: Video",
+]
+
+# The router itself has NO heavy dependencies — that is the point. It decides
+# which frames deserve an expensive model call using signals that run on a
+# 160x90 downscale. The expensive model (CLIP, a VLM, whatever) is yours.
+dependencies = [
+    "numpy>=1.24",
+    "opencv-python>=4.8",
+]
+
+[project.optional-dependencies]
+# The multimodal search stack (visual + OCR + speech) and the real-CLIP
+# benchmarks. Only needed if you index/search video, not to route frames.
+search = [
+    "torch>=2.1",
+    "torchvision>=0.16",
+    "openai-clip",
+    "faiss-cpu>=1.8",
+    "ultralytics>=8.0",
+    "easyocr",
+    "openai-whisper",
+    "fastapi",
+    "uvicorn",
+]
+bench = [
+    "torch>=2.1",
+    "openai-clip",
+    "faiss-cpu>=1.8",
+]
+dev = ["pytest>=7"]
+
+[project.scripts]
+frameroute = "frameroute.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/asmitha2025/ADVE"
+
+# Ship the router as the installable package. The `adve` search stack and the
+# `bench` harness are discovered too (so `pip install -e .` exposes them for
+# self-hosting and benchmarking), but only `frameroute` needs the core deps.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["frameroute*", "adve*", "bench*"]
+exclude = [
+    "tests*", "scratch*", "training*", "edge*", "sdk*", "models*",
+    "data*", "docs*", "results*", "outputs*", "adve_v2*",
+    "adve_realworld_test*", "frameroute_selftest*",
+]
