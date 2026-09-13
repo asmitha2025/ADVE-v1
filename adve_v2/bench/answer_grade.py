@@ -51,17 +51,28 @@ TASK_QUERIES: List[str] = [
 
 
 class Gemini:
-    def __init__(self, model: str = "gemini-2.5-flash", delay: float = 0.0,
+    def __init__(self, model: Optional[str] = None, delay: float = 0.0,
                  max_retries: int = 5):
         self.key = os.environ["GEMINI_API_KEY"]
-        self.model = model
+        # gemini-flash-latest is a stable alias that always resolves to a
+        # current vision-capable flash model; pinned versions (e.g. 2.5-flash)
+        # 404 for accounts created after they were retired. Override with
+        # GEMINI_MODEL if needed.
+        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
         self.delay = delay
         self.max_retries = max_retries
 
     def _call(self, parts: list, max_tokens: int) -> str:
+        # thinkingBudget=0 disables the model's internal reasoning tokens. Newer
+        # flash models ("thinking" models) otherwise spend the whole output
+        # budget reasoning and return an empty answer (finishReason=MAX_TOKENS),
+        # which looks like a failure. Disabling it makes them answer directly.
         body = json.dumps({
             "contents": [{"parts": parts}],
-            "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.0},
+            "generationConfig": {
+                "maxOutputTokens": max_tokens, "temperature": 0.0,
+                "thinkingConfig": {"thinkingBudget": 0},
+            },
         }).encode()
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
         backoff = 2.0
@@ -73,7 +84,10 @@ class Gemini:
                 r = json.loads(urllib.request.urlopen(req, timeout=45).read())
                 if self.delay:
                     time.sleep(self.delay)
-                return r["candidates"][0]["content"]["parts"][0]["text"].strip()
+                cand = (r.get("candidates") or [{}])[0]
+                cparts = (cand.get("content") or {}).get("parts") or [{}]
+                txt = cparts[0].get("text", "")
+                return txt.strip() if txt else f"__ERR__ empty({cand.get('finishReason')})"
             except urllib.error.HTTPError as e:
                 if e.code == 429 and attempt < self.max_retries - 1:
                     time.sleep(backoff)
@@ -97,7 +111,7 @@ class Gemini:
             {"text": "Describe what this video frame shows in one concise sentence "
                      "(the main visual content: slide type, figures, text topic, people)."},
             self._img_part(frame),
-        ], max_tokens=60)
+        ], max_tokens=160)
 
     def judge(self, a: str, b: str) -> bool:
         out = self._call([
@@ -105,7 +119,7 @@ class Gemini:
                      "one word: SAME if they describe the same content/moment, or "
                      "DIFFERENT if not.\n"
                      f"A: {a}\nB: {b}"},
-        ], max_tokens=3)
+        ], max_tokens=12)
         return out.strip().upper().startswith("SAME")
 
 
