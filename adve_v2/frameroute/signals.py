@@ -171,6 +171,15 @@ class SignalExtractor:
         self.region_gain = float(region_gain)
         self._region_mu, self._region_sd = 0.0, 1e-6
         self._n_region = 0
+        # TODO(region-adaptive-gain): region-aware detection helps at TIGHT
+        # budgets (measured: +0.125 recall at 15-25 calls on MOT17) but slightly
+        # hurts at LOOSE budgets (-0.037 at 100 calls) where the extra
+        # sensitivity picks up noise. A budget-aware gain would raise it when
+        # skipping hard and lower it when not. Needs the region signal blended
+        # at ROUTE time (budget known) rather than baked in here at analysis
+        # time — store region_residual separately and combine in the router.
+        # Low priority: the fixed default wins in the aggressive regime we
+        # deploy in; only worth it when tuning to a specific customer budget.
 
         if isinstance(weights, str):
             if weights not in self.WEIGHT_PRESETS:
