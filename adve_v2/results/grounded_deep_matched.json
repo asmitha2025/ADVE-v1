@@ -1,0 +1,32 @@
+{
+  "video": "../dataset_lectures/video/deep_learning_high_res.mp4",
+  "frames_analyzed": 400,
+  "duration_sec": 3255.64,
+  "budget": 80,
+  "k": 5,
+  "n_queries": 20,
+  "full": {
+    "name": "reference_full",
+    "model_calls": 400,
+    "hit_at_k": 0.45,
+    "precision_at_k": 0.45,
+    "n_queries": 20
+  },
+  "routed": {
+    "name": "frameroute",
+    "model_calls": 131,
+    "hit_at_k": 0.65,
+    "precision_at_k": 0.43000000000000005,
+    "n_queries": 20
+  },
+  "uniform": {
+    "name": "uniform",
+    "model_calls": 131,
+    "hit_at_k": 0.75,
+    "precision_at_k": 0.45999999999999996,
+    "n_queries": 20
+  },
+  "routed_vs_uniform_hit_delta": -0.1,
+  "routed_vs_uniform_rel_gain_pct": -13.33,
+  "routed_calls_saved_vs_full_pct": 67.2
+}
