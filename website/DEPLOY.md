@@ -1,85 +1,89 @@
 # Deploying the frameroute site
 
-`index.html` is a single self-contained file — no build step, no bundler, no
-framework. Everything is inline except Google Fonts. That means you can host it
-anywhere that serves a static file.
+Static files, no build step, no framework. Everything is inline except Google
+Fonts, so any static host will serve it as-is.
+
+```
+website/
+  index.html      landing page (3D hero, pricing, integrations)
+  evidence.html   the measurements, including what failed
+  netlify.toml    publish config + security headers
+  robots.txt      ← replace YOUR-DOMAIN.com
+  sitemap.xml     ← replace YOUR-DOMAIN.com
+  DEPLOY.md       this file
+```
 
 ---
 
-## Fastest path (pick one) — all free tiers
+## Deploy (pick one)
 
-### 1. Netlify Drop — 30 seconds, no account needed to try
-1. Open <https://app.netlify.com/drop>
-2. Drag the **`website/` folder** onto the page.
-3. You get a live URL immediately (e.g. `random-name.netlify.app`).
-4. Sign in to keep it and attach a custom domain.
+### Netlify — fastest
+Drag the **`website/` folder** onto <https://app.netlify.com/drop>. Live in
+seconds; `netlify.toml` is picked up automatically. Sign in to keep the URL and
+attach a domain.
 
-### 2. Vercel
+### Vercel
 ```bash
-npm i -g vercel
-cd website
-vercel            # follow prompts; accept defaults
-vercel --prod     # promote to production
+cd website && npx vercel --prod
 ```
 
-### 3. GitHub Pages (free, versioned with the repo)
+### GitHub Pages
 ```bash
-# from the repo root, on a branch you are happy to publish
 git subtree push --prefix website origin gh-pages
 ```
-Then: **GitHub → Settings → Pages → Source: `gh-pages` branch → `/ (root)`**.
-Site appears at `https://<user>.github.io/<repo>/`.
+Then **Settings → Pages → Source: `gh-pages` / root**.
 
-### 4. Cloudflare Pages
-Connect the repo, set **Build command: _(none)_** and
-**Build output directory: `website`**.
+### Cloudflare Pages
+Connect the repo. **Build command:** _(none)_ · **Output directory:** `website`
 
 ---
 
-## Deployment to-do list
+## Already done
 
-### Before you publish
-- [ ] **Read the page end to end.** It deliberately publishes our failed
-      claims. That is the point — do not quietly delete the "what we could not
-      prove" section to make it look better.
-- [ ] **Replace the audit call-to-action** with a real destination — a
-      `mailto:` link, a Calendly, or a form. Right now the buttons are anchors
-      to page sections only.
-- [ ] **Add a contact address** in the footer. A landing page with no way to
-      reach you converts nothing.
-- [ ] Decide whether to link the internal calculator/report artifacts. They are
-      **private to your Claude account** and will 404 for anyone else — either
-      make them public or leave them out.
+- [x] `index.html` is the landing page; `evidence.html` holds the full results
+- [x] Contact route wired — every CTA opens a pre-filled audit request email
+- [x] Open Graph + Twitter card meta so shared links preview properly
+- [x] Inline SVG favicon (no extra file to serve)
+- [x] Security headers via `netlify.toml`
+- [x] `robots.txt` + `sitemap.xml`
+- [x] Verified no private Claude artifact links leak onto the public pages
+- [x] The unbuilt hosted API is labelled **private beta / not launched**, and
+      the API tier is a waitlist rather than a signup
 
-### Domain and delivery
-- [ ] Buy a domain and point it at the host (all four options above support
-      custom domains + automatic HTTPS).
-- [ ] Confirm HTTPS is on (automatic on Netlify/Vercel/Pages/Cloudflare).
-- [ ] Check the page on a phone — it is responsive, but look at it yourself.
-- [ ] Check dark mode; the page follows the visitor's system theme.
+## Before you announce it
 
-### Analytics (optional but do it before outreach)
-- [ ] Add a privacy-friendly analytics snippet (Plausible, Fathom, or
-      Cloudflare Web Analytics) so you learn which section people read before
-      they bounce. Skip Google Analytics unless you need it.
+- [ ] **Swap the contact address.** Every CTA currently mails
+      `baranitharan2020@gmail.com`. Replace it with a business address or a
+      Calendly link — search the file for `mailto:` (4 places incl. the footer).
+- [ ] **Replace `YOUR-DOMAIN.com`** in `robots.txt` and `sitemap.xml`.
+- [ ] **Add an OG image** (1200×630 PNG) and reference it with
+      `<meta property="og:image">` — link previews are much stronger with one.
+- [ ] Buy a domain, point it at the host, confirm HTTPS (automatic on all four).
+- [ ] Open it on a phone and in dark mode. It is responsive and theme-aware,
+      but look at it yourself.
+- [ ] Add privacy-friendly analytics (Plausible, Fathom or Cloudflare Web
+      Analytics) so you learn where people stop reading before you do outreach.
 
-### Do **not** deploy these yet
+## Do **not** deploy
+
 - [ ] ❌ **The API server** (`adve_v2/adve/api/server.py`). Seven security
-      defects were fixed, but it has never been load-tested, has no HTTPS
-      termination of its own, stores API keys in plaintext SQLite, and has no
-      tenancy isolation — `/v1/stats` exposes every task to every caller.
-      The audit offer runs **offline** on footage a customer sends you, so you
-      do not need the server to sell the first customers.
+      defects were fixed and verified, but it has never been load-tested, has
+      no tenancy isolation (`/v1/stats` exposes every task to every caller),
+      and stores API keys in plaintext SQLite. The audit runs **offline** on
+      footage a customer sends you, so nothing about this blocks selling.
 - [ ] ❌ Any claim that the router beats uniform sampling. It did not replicate.
 
 ---
 
-## If you change the page
-Edit `index.html` directly. Keep these intact, because they are the reason the
-page is credible:
+## If you edit the pages
 
-- the **"What we could not prove"** block,
-- the **"Not production ready"** status block,
-- the honest sample-size caveat (two lectures, 20 queries each).
+Keep these three things. They are the reason the site is credible:
 
-A measurement company that hides a measurement has nothing left to sell.
+1. **"What we don't claim"** on `index.html` — the router did not beat uniform
+   sampling, two quality claims were withdrawn, the sample is two lectures.
+2. **"Where the product actually is today"** — the honest statement that the
+   hosted API is not built.
+3. **The status block** on `evidence.html` marking the server not production
+   ready.
+
+A company whose entire pitch is honest measurement cannot hide a measurement.
