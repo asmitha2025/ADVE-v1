@@ -58,7 +58,10 @@ class Gemini:
         # current vision-capable flash model; pinned versions (e.g. 2.5-flash)
         # 404 for accounts created after they were retired. Override with
         # GEMINI_MODEL if needed.
-        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+        # gemini-flash-lite-latest is a non-thinking vision model available to
+        # new accounts (the pinned 2.5-flash 404s for them, and the thinking
+        # gemini-flash-latest returns empty answers). Lite reliably returns text.
+        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-flash-lite-latest")
         self.delay = delay
         self.max_retries = max_retries
 
@@ -67,13 +70,14 @@ class Gemini:
         # flash models ("thinking" models) otherwise spend the whole output
         # budget reasoning and return an empty answer (finishReason=MAX_TOKENS),
         # which looks like a failure. Disabling it makes them answer directly.
-        body = json.dumps({
-            "contents": [{"parts": parts}],
-            "generationConfig": {
-                "maxOutputTokens": max_tokens, "temperature": 0.0,
-                "thinkingConfig": {"thinkingBudget": 0},
-            },
-        }).encode()
+        gen_cfg = {"maxOutputTokens": max_tokens, "temperature": 0.0}
+        # thinkingBudget=0 disables reasoning tokens on THINKING models (else
+        # they spend the whole budget reasoning and return empty). "lite" models
+        # are already non-thinking and REJECT thinkingConfig with a 400, so only
+        # send it when the model isn't a lite variant.
+        if "lite" not in self.model:
+            gen_cfg["thinkingConfig"] = {"thinkingBudget": 0}
+        body = json.dumps({"contents": [{"parts": parts}], "generationConfig": gen_cfg}).encode()
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
         backoff = 2.0
         for attempt in range(self.max_retries):
