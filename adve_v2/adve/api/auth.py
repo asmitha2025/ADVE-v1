@@ -20,6 +20,8 @@ from typing import List, Optional
 # we are in so startup can warn.
 _USING_DEV_KEY = "ADVE_API_KEY" not in os.environ
 DEFAULT_API_KEY = os.environ.get("ADVE_API_KEY", "adve-dev-key-2026")
+# Set ADVE_ENV=production to refuse the built-in development key outright.
+_PRODUCTION = os.environ.get("ADVE_ENV", "").strip().lower() in ("production", "prod")
 
 # Public endpoints that must work without a key:
 #   /health, /v1/health   — liveness probes for load balancers / orchestration
@@ -65,7 +67,11 @@ class APIKeyStore:
                 conn.commit()
 
     def validate_key(self, api_key: str) -> bool:
-        if api_key == DEFAULT_API_KEY:
+        # The built-in development key is only honoured when ADVE_API_KEY was
+        # never configured AND we are not running in production. Otherwise a
+        # deployment that forgot to set a key would silently accept a password
+        # published in this repository. Fail closed instead.
+        if api_key == DEFAULT_API_KEY and not (_USING_DEV_KEY and _PRODUCTION):
             return True
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()

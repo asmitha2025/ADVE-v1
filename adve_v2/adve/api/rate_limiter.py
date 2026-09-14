@@ -19,6 +19,23 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         self.requests_per_minute = requests_per_minute
         self.window_size = window_size
         self.history: Dict[str, List[float]] = defaultdict(list)
+        # The identifier is caller-controlled (an API-key header), so an
+        # attacker can mint unlimited distinct keys and grow this table without
+        # bound. Prune expired identifiers periodically and cap the table size.
+        self.max_identifiers = 10000
+        self._requests_since_sweep = 0
+        self._sweep_every = 500
+
+    def _sweep(self, window_start: float) -> None:
+        stale = [k for k, ts in self.history.items()
+                 if not ts or ts[-1] <= window_start]
+        for k in stale:
+            del self.history[k]
+        if len(self.history) > self.max_identifiers:
+            # Still oversized after pruning: drop the least-recently-seen.
+            for k, _ in sorted(self.history.items(), key=lambda kv: kv[1][-1])[
+                    : len(self.history) - self.max_identifiers]:
+                del self.history[k]
 
     async def dispatch(self, request: Request, call_next):
         # Exclude public / static paths from rate limiting
@@ -30,6 +47,11 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         identifier = request.headers.get("X-API-Key") or (request.client.host if request.client else "unknown")
         now = time.time()
         window_start = now - self.window_size
+
+        self._requests_since_sweep += 1
+        if self._requests_since_sweep >= self._sweep_every:
+            self._requests_since_sweep = 0
+            self._sweep(window_start)
 
         # Clean old requests outside window
         timestamps = [ts for ts in self.history[identifier] if ts > window_start]

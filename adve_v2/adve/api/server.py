@@ -15,10 +15,18 @@ app = FastAPI(
     version="2.0.0",
 )
 
+# Wildcard CORS lets any site on the internet call this API with a user's
+# browser. Configure real origins via ADVE_CORS_ORIGINS (comma separated);
+# the default is local development only.
+_cors_env = os.environ.get("ADVE_CORS_ORIGINS", "").strip()
+ALLOWED_ORIGINS = ([o.strip() for o in _cors_env.split(",") if o.strip()]
+                   or ["http://localhost:3000", "http://127.0.0.1:3000",
+                       "http://localhost:8000", "http://127.0.0.1:8000"])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -46,6 +54,42 @@ import json
 DATA_DIR = os.environ.get("ADVE_DATA_DIR", "adve_v2/data")
 INDEX_DIR = os.path.join(DATA_DIR, "main_index")
 UPLOADS_DIR = os.path.join(DATA_DIR, "uploads")
+
+# ── Path safety ───────────────────────────────────────────────────────────────
+# video_id and upload filenames arrive from the client. Without containment a
+# caller can name ANY file on disk — and /v1/frame with frame_idx=-1 would
+# stream it back verbatim. Every media lookup resolves to a basename inside one
+# of these roots, and only video extensions are served.
+import re
+
+MEDIA_ROOTS = [os.path.abspath(p) for p in [
+    UPLOADS_DIR, "demo_videos", "demo_data/videos",
+    "adve_v2/demo_videos", "adve_v2/demo_data/videos", "Input video", ".",
+]]
+MEDIA_EXTS = {".mp4", ".webm", ".mkv", ".avi", ".mov", ".m4v"}
+
+
+def safe_filename(name: str) -> str:
+    """Strip every directory component so a name cannot escape its folder."""
+    base = os.path.basename((name or "").replace("\\", "/"))
+    base = re.sub(r"[^A-Za-z0-9._-]", "_", base).lstrip(".")
+    return (base or "upload.bin")[:180]
+
+
+def resolve_media(video_id: str) -> Optional[str]:
+    """Resolve a client-supplied id to a real video file INSIDE MEDIA_ROOTS."""
+    base = safe_filename(video_id)
+    if os.path.splitext(base)[1].lower() not in MEDIA_EXTS:
+        return None
+    for root in MEDIA_ROOTS:
+        cand = os.path.abspath(os.path.join(root, base))
+        try:
+            if os.path.commonpath([cand, root]) == root and os.path.isfile(cand):
+                return cand
+        except ValueError:      # different drives on Windows
+            continue
+    return None
+
 
 import threading
 
@@ -555,7 +599,7 @@ def index_video_task(
     search_index.save()
 
     # Save accumulated sports analytics raw timelines
-    sports_data_path = os.path.join(INDEX_DIR, f"{video_id}_sports_data.json")
+    sports_data_path = os.path.join(INDEX_DIR, f"{safe_filename(video_id)}_sports_data.json")
     try:
         with open(sports_data_path, "w") as sf:
             json.dump({
@@ -732,14 +776,18 @@ async def index_video(
 ):
     """Upload and index a video file. Returns immediately, indexes in background."""
     os.makedirs(UPLOADS_DIR, exist_ok=True)
-    dest = os.path.join(UPLOADS_DIR, file.filename)
+    # file.filename is attacker-controlled: unsanitised, "../../evil.sh" would
+    # write outside UPLOADS_DIR. Derive one safe name and use it everywhere so
+    # the stored file, the task id and the returned video_id all agree.
+    safe_name = safe_filename(file.filename)
+    dest = os.path.join(UPLOADS_DIR, safe_name)
 
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    task_id = f"upload_{int(time.time())}_{file.filename}"
+    task_id = f"upload_{int(time.time())}_{safe_name}"
     active_tasks[task_id] = {
-        "name": file.filename,
+        "name": safe_name,
         "status": "Starting upload...",
         "progress": 0.0
     }
@@ -747,7 +795,7 @@ async def index_video(
     background_tasks.add_task(
         index_video_task,
         dest,
-        file.filename,
+        safe_name,
         task_id,
         tiled_encoding,
         ocr,
@@ -758,7 +806,7 @@ async def index_video(
 
     return {
         "status":   "indexing_started",
-        "video_id": file.filename,
+        "video_id": safe_name,
         "task_id":  task_id,
         "message":  "Indexing running in background. Use /v1/stats to monitor."
     }
@@ -1142,7 +1190,8 @@ async def chat_rag(request: ChatRequest):
         
         print("[Chat RAG] Sending multi-modal query to Groq Llama 3.2 Vision...")
         response = client.chat.completions.create(
-            model="llama-3.2-11b-vision-preview",
+            model=os.environ.get("GROQ_VISION_MODEL",
+                                 "meta-llama/llama-4-scout-17b-16e-instruct"),
             messages=[{"role": "user", "content": prompt_content}],
             max_tokens=400,
             temperature=0.2
@@ -1229,35 +1278,16 @@ def read_frame_cached(video_path: str, frame_idx: int) -> Optional[bytes]:
 
 @app.get("/v1/frame")
 async def get_frame(video_id: str, frame_idx: int):
-    # Normalize Windows backslashes to forward slashes for Linux compatibility
-    video_id_clean = video_id.replace("\\", "/")
-    basename = os.path.basename(video_id_clean)
+    # resolve_media() confines the lookup to MEDIA_ROOTS and to video
+    # extensions. Previously `video_id` was used as a path directly, so any
+    # readable file could be exfiltrated (frame_idx=-1 streamed it whole).
+    video_path = resolve_media(video_id)
+    if video_path is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Video file not found: {safe_filename(video_id)}",
+        )
 
-    # Try absolute or relative path first
-    video_path = video_id if os.path.exists(video_id) else os.path.join(UPLOADS_DIR, basename)
-    
-    if not os.path.exists(video_path):
-        if "MOT17" in video_id:
-            video_path = f"Input video/{basename}"
-        elif basename == "test_video.mp4":
-            video_path = "test_video.mp4"
-        else:
-            # Check candidate directories
-            for folder in ["demo_videos", "demo_data/videos", "adve_v2/demo_videos", "adve_v2/demo_data/videos"]:
-                candidate = os.path.join(folder, basename)
-                if os.path.exists(candidate):
-                    video_path = candidate
-                    break
-            else:
-                video_path = video_id
-            
-    if not os.path.exists(video_path):
-        fallback = os.path.join(UPLOADS_DIR, basename)
-        if os.path.exists(fallback):
-            video_path = fallback
-        else:
-            raise HTTPException(status_code=404, detail=f"Video file not found: {video_id}")
-            
     if frame_idx == -1:
         from fastapi.responses import FileResponse
         return FileResponse(video_path, media_type="video/mp4")
@@ -1275,7 +1305,7 @@ async def run_sports_analytics(
     player_filter: str = "All Players",
     colormap: str = "Jet"
 ):
-    sports_data_path = os.path.join(INDEX_DIR, f"{video_id}_sports_data.json")
+    sports_data_path = os.path.join(INDEX_DIR, f"{safe_filename(video_id)}_sports_data.json")
     if not os.path.exists(sports_data_path):
         raise HTTPException(status_code=404, detail="Sports timeline data not found. Please index the video first.")
         
