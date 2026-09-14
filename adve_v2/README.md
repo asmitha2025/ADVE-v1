@@ -126,14 +126,36 @@ reconstruction did not survive them and has been **removed**: the pipeline is
 now CLIP-only (`adve/core/pipeline.py`, `adve/core/lean_indexer.py`), so every
 stored embedding is a real model call and nothing is synthesised.
 
-**Cost + quality** — 6 real lectures, routed frames vs full compute, judged by
-a real VLM (Gemini) answering the same question of each frame:
+**Retrieval** — two real lectures, scored by `bench/grounded_eval.py` against
+ground truth *neither index produced*: the lecture's own slide text (OCR).
+Queries are mined from recurring slide terms; the relevant frames are the ones
+whose slides contain the term. No VLM judging its own output.
 
-| metric | value |
-|---|---|
-| answer parity | median **100%**, mean ~93% (range 75–100%) |
-| model-call reduction at parity | ~4–7× (**median 5.4×**) |
-| cost cut | ~**80%** |
+| lecture (20 queries, top-5) | calls | hit@5 | precision@5 |
+|---|---:|---:|---:|
+| cities_and_decarb — full | 400 | 0.450 | 0.400 |
+| cities_and_decarb — **frameroute** | 104 | **0.750** | 0.320 |
+| cities_and_decarb — uniform | 104 | 0.600 | 0.240 |
+| deep_learning — full | 400 | 0.450 | 0.450 |
+| deep_learning — **frameroute** | 131 | 0.650 | 0.430 |
+| deep_learning — uniform | 131 | **0.750** | 0.460 |
+
+**What holds:** at **67–74% fewer calls**, hit@5 was *higher* than full compute
+on both clips (0.65–0.75 vs 0.45). Skipping frames does not hurt retrieval —
+that is what the ~**80% cost cut** rests on, and it replicated.
+
+**What does not hold:** change-aware routing showed **no consistent advantage
+over plain uniform sampling** — +25% on one lecture, −13% on the other, at
+identical call counts. On this evidence the saving comes from *sending fewer
+frames*, not from our selection algorithm. Do not claim otherwise.
+
+**Withdrawn:** earlier versions of this file quoted "median 100% answer parity"
+and "lectures won 4/5 matched-budget tests". The first came from a lenient
+yes/no VLM check that counted two *different* slides as a match (a stricter
+free-form judge scored the same clips 20–35%); the second came from CLIP
+timestamp-recall, which penalises returning the right slide a few seconds off.
+Both metrics were unreliable and have been replaced by the grounded evaluation
+above.
 
 **Latency** — end-to-end indexing on a laptop GPU (RTX 4050):
 
@@ -143,13 +165,9 @@ a real VLM (Gemini) answering the same question of each frame:
 | throughput | 4.5–12× realtime (**1 hr of video in ~5–13 min**) |
 | vs encoding every frame | **~3× faster** |
 
-**Where the router beats uniform:** unevenly-paced footage — lectures won 4/5
-matched-budget tests (up to +0.275 recall). On continuous motion (traffic,
-busy CCTV) plain uniform sampling ties it. Sell on the former, not the latter.
-
-Reproduce: `python -m bench.cost_parity --video <lecture> --auto-span` and
-`python -m bench.latency --video <lecture>`. These are single-clip-per-domain
-samples — a strong directional signal, not yet a published benchmark.
+Reproduce: `python -m bench.grounded_eval --video <lecture> --budget 80` and
+`python -m bench.latency --video <lecture>`. Two clips, 20 queries each — a
+real signal, not yet a published benchmark.
 
 ---
 
