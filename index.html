@@ -1,48 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
 <title>frameroute</title>
 <meta name="description" content="Stop paying your vision model to look at the same frame twice. Route in change, not in time — 3–4× fewer calls, ~80% off your video AI bill.">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <meta property="og:type" content="website">
 <meta property="og:title" content="frameroute — stop paying to look at the same frame twice">
 <meta property="og:description" content="An hour of video at 1 fps is 3,600 vision-model calls, and most frames are identical. Route in change, not in time: 3–4× fewer calls, ~80% lower spend.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="frameroute — the video cost layer">
 <meta name="twitter:description" content="3–4× fewer vision-model calls at equal retrieval. Measured against ground truth, with the failed results published too.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%230b0d10'/><rect x='18' y='30' width='26' height='40' rx='4' fill='%23f0a03c'/><rect x='56' y='30' width='26' height='40' rx='4' fill='%23323b46'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%2307080a'/><rect x='18' y='30' width='26' height='40' rx='4' fill='%23f0a03c'/><rect x='56' y='30' width='26' height='40' rx='4' fill='%23323b46'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* ── dark-first cinematic palette (film-grading suite) ─────────────────── */
+/* ── cinematic dark, committed ──────────────────────────────────────────
+   This page is deliberately single-theme: a lit corridor of frames only
+   reads against black. The evidence page stays theme-aware. */
 :root{
-  --bg:#0b0d10; --bg-2:#101317; --panel:#151a20; --panel-2:#1b212a;
-  --ink:#f2f0ec; --ink-2:#a9b2bd; --muted:#6f7883;
-  --line:#232a33; --line-2:#323b46;
-  --amber:#f0a03c;        /* light through a kept frame */
-  --amber-dim:#8a5f24;
-  --save:#3ec9a7;         /* money saved */
-  --bad:#e8705f;
-  --glow:0 0 0 1px rgba(240,160,60,.35), 0 8px 34px rgba(240,160,60,.18);
-  --shadow:0 2px 6px rgba(0,0,0,.4), 0 20px 60px rgba(0,0,0,.45);
+  --bg:#07080a; --bg-2:#0c0f13; --panel:#11151b; --panel-2:#171d25;
+  --ink:#f4f2ee; --ink-2:#a7b1bd; --muted:#6b7683;
+  --line:#1e242c; --line-2:#2c3642;
+  --amber:#f0a03c; --amber-hot:#ffc477; --amber-dim:#7c5520;
+  --save:#3ec9a7; --bad:#e8705f;
+  --glow:0 0 0 1px rgba(240,160,60,.35), 0 8px 40px rgba(240,160,60,.20);
+  --shadow:0 2px 6px rgba(0,0,0,.5), 0 24px 70px rgba(0,0,0,.55);
 }
-@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
-  --bg:#f6f5f2; --bg-2:#efeee9; --panel:#ffffff; --panel-2:#f7f6f3;
-  --ink:#14171b; --ink-2:#4c545d; --muted:#7d858e;
-  --line:#e2e0da; --line-2:#cdcac2;
-  --amber:#b9700f; --amber-dim:#e3c79a; --save:#12836a; --bad:#b53f2e;
-  --glow:0 0 0 1px rgba(185,112,15,.3), 0 8px 30px rgba(185,112,15,.14);
-  --shadow:0 1px 3px rgba(20,23,27,.07), 0 16px 44px rgba(20,23,27,.10);
-}}
-:root[data-theme="light"]{
-  --bg:#f6f5f2; --bg-2:#efeee9; --panel:#ffffff; --panel-2:#f7f6f3;
-  --ink:#14171b; --ink-2:#4c545d; --muted:#7d858e;
-  --line:#e2e0da; --line-2:#cdcac2;
-  --amber:#b9700f; --amber-dim:#e3c79a; --save:#12836a; --bad:#b53f2e;
-  --glow:0 0 0 1px rgba(185,112,15,.3), 0 8px 30px rgba(185,112,15,.14);
-  --shadow:0 1px 3px rgba(20,23,27,.07), 0 16px 44px rgba(20,23,27,.10);
-}
-
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;background:var(--bg)}
 body{margin:0;background:var(--bg);color:var(--ink);
   font-family:Inter,system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.6;
   -webkit-font-smoothing:antialiased;overflow-x:hidden}
@@ -56,74 +45,131 @@ a{color:var(--amber)}
 .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.22em;
   text-transform:uppercase;color:var(--amber);font-weight:500}
 
-/* ── nav ─────────────────────────────────────────────────────────────── */
-nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
-  background:color-mix(in srgb,var(--bg) 82%,transparent);border-bottom:1px solid var(--line)}
+/* ── loader ─────────────────────────────────────────────────────────── */
+#loader{position:fixed;inset:0;z-index:200;background:var(--bg);display:grid;place-items:center;
+  transition:opacity .7s ease .1s, visibility .7s}
+#loader.done{opacity:0;visibility:hidden}
+#loader .lw{text-align:center}
+#loader .lb{width:180px;height:2px;background:var(--line);margin:18px auto 0;overflow:hidden;border-radius:2px}
+#loader .lb i{display:block;height:100%;width:0;background:var(--amber);animation:fill 1.25s cubic-bezier(.4,0,.2,1) forwards}
+@keyframes fill{to{width:100%}}
+#loader .lt{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:22px;letter-spacing:-.03em}
+#loader .ls{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--muted);margin-top:10px}
+
+/* ── webgl canvas ───────────────────────────────────────────────────── */
+#gl{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block;pointer-events:none}
+/* Fallback when WebGL or the module is unavailable — the page still works. */
+.no-gl #gl{display:none}
+.bgfall{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(1100px 620px at 68% 12%, rgba(240,160,60,.16), transparent 62%),
+    radial-gradient(900px 560px at 14% 82%, rgba(62,201,167,.09), transparent 66%),
+    var(--bg)}
+.gl-ready .bgfall{opacity:.55;transition:opacity 1.2s ease}
+
+/* ── nav ────────────────────────────────────────────────────────────── */
+nav{position:fixed;top:0;left:0;right:0;z-index:60;backdrop-filter:blur(16px);
+  background:linear-gradient(to bottom,rgba(7,8,10,.86),rgba(7,8,10,.42));
+  border-bottom:1px solid rgba(255,255,255,.05)}
 nav .inner{max-width:1080px;margin:0 auto;padding:13px 24px;display:flex;align-items:center;gap:26px}
 .brand{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:17px;letter-spacing:-.03em;
   color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:9px}
 .brand .dot{width:9px;height:9px;border-radius:2px;background:var(--amber);box-shadow:var(--glow)}
-nav .links{display:flex;gap:22px;margin-left:auto;font-size:14px}
+nav .links{display:flex;gap:22px;margin-left:auto;font-size:14px;align-items:center}
 nav .links a{color:var(--ink-2);text-decoration:none}
 nav .links a:hover{color:var(--ink)}
-@media (max-width:760px){nav .links{display:none}}
+nav .links a.mini{border:1px solid var(--line-2);border-radius:8px;padding:7px 13px;color:var(--ink)}
+@media (max-width:860px){nav .links a:not(.mini){display:none}}
 
-/* ── buttons ─────────────────────────────────────────────────────────── */
+/* ── buttons ────────────────────────────────────────────────────────── */
 .btn{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:15px;
   padding:13px 22px;border-radius:10px;text-decoration:none;border:1px solid transparent;
-  transition:transform .15s ease}
+  transition:transform .15s ease, box-shadow .2s ease}
 .btn:hover{transform:translateY(-1px)}
-.btn.p{background:var(--amber);color:#14100a;box-shadow:var(--glow)}
-.btn.g{border-color:var(--line-2);color:var(--ink);background:var(--panel)}
+.btn.p{background:var(--amber);color:#160f05;box-shadow:var(--glow)}
+.btn.p:hover{box-shadow:0 0 0 1px rgba(240,160,60,.5),0 10px 46px rgba(240,160,60,.34)}
+.btn.g{border-color:var(--line-2);color:var(--ink);background:rgba(23,29,37,.72);backdrop-filter:blur(8px)}
 .btn:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
 
-/* ── hero ────────────────────────────────────────────────────────────── */
-header{padding-block:70px 30px;position:relative}
-h1{font-size:clamp(40px,7.4vw,86px)}
+/* ── the scroll experience ──────────────────────────────────────────────
+   DEFAULT = plain stacked sections, fully readable with no JavaScript, no
+   WebGL and no CDN. The cinematic fixed-overlay treatment is switched on by
+   `.gl-ready`, which scene.js adds only once the scene is actually running.
+   Never make the copy depend on the scene: a blocked CDN must not be able to
+   take the headline with it. */
+#experience{position:relative;z-index:2;padding-block:128px 30px}
+.acts{position:relative;z-index:3}
+.act{position:relative;width:min(1080px,100%);margin:0 auto 76px;padding-inline:24px}
+.act.mid{text-align:center}
+
+.gl-ready #experience{height:560vh;padding:0}
+.gl-ready .acts{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none}
+.gl-ready .act{position:absolute;width:min(1080px,100% - 48px);margin:0;opacity:0;
+  will-change:opacity,transform}
+/* A soft well behind each caption, so the copy stays readable even when a lit
+   plate drifts directly behind it. */
+.gl-ready .act::before{content:"";position:absolute;inset:-8% -6%;z-index:-1;
+  background:radial-gradient(ellipse at center,rgba(7,8,10,.74) 0%,rgba(7,8,10,.42) 48%,transparent 76%)}
+h1{font-size:clamp(38px,7vw,84px)}
 h1 .lit{color:var(--amber)}
-.lede{font-size:clamp(16.5px,2.1vw,20px);color:var(--ink-2);max-width:54ch;margin-top:22px}
+.lede{font-size:clamp(16.5px,2vw,20px);color:var(--ink-2);max-width:52ch;margin-top:22px;
+  text-shadow:0 2px 24px rgba(0,0,0,.85)}
+.act.mid .lede{margin-inline:auto}
 .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+.act.mid .cta{justify-content:center}
 .trust{margin-top:18px;font-size:13px;color:var(--muted);font-family:"IBM Plex Mono",monospace}
 
-/* ── 3D frame stack ──────────────────────────────────────────────────── */
-.stage{margin-top:52px;perspective:1500px;perspective-origin:50% 45%;height:330px;position:relative}
-@media (max-width:760px){.stage{height:250px}}
-.scene{position:absolute;inset:0;transform-style:preserve-3d;
-  transition:transform .35s cubic-bezier(.2,.7,.3,1)}
-.fr{position:absolute;left:50%;top:50%;width:132px;height:88px;margin:-44px 0 0 -66px;
-  border-radius:7px;transform-style:preserve-3d;
-  background:linear-gradient(150deg,var(--panel-2),var(--panel));
-  border:1px solid var(--line-2);
-  transition:opacity .45s ease, box-shadow .45s ease, border-color .45s ease, filter .45s ease}
-.fr::before{content:"";position:absolute;inset:7px;border-radius:3px;
-  background:repeating-linear-gradient(115deg,var(--line) 0 9px,transparent 9px 19px);opacity:.5}
-.fr::after{content:"";position:absolute;left:0;right:0;top:0;height:5px;
-  background:repeating-linear-gradient(90deg,var(--line-2) 0 4px,transparent 4px 9px)}
-.fr.keep{border-color:var(--amber);box-shadow:var(--glow);
-  background:linear-gradient(150deg,color-mix(in srgb,var(--amber) 22%,var(--panel)),var(--panel))}
-.fr.keep::before{opacity:.85;background:repeating-linear-gradient(115deg,
-  color-mix(in srgb,var(--amber) 42%,transparent) 0 9px,transparent 9px 19px)}
-.fr.drop{opacity:.3;filter:saturate(.25)}
-.tag{position:absolute;bottom:-21px;left:50%;transform:translateX(-50%);
-  font-family:"IBM Plex Mono",monospace;font-size:9.5px;color:var(--amber);white-space:nowrap;opacity:0;
-  transition:opacity .4s ease}
-.fr.keep .tag{opacity:1}
+/* the big act numbers */
+.bignum{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;letter-spacing:-.045em;
+  font-size:clamp(64px,14vw,180px);line-height:.88;margin:0}
+.bignum.warn{color:var(--ink)}
+.bignum.good{color:var(--amber);text-shadow:0 0 70px rgba(240,160,60,.4)}
+.actlabel{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--amber);margin-bottom:18px}
+.actsub{font-size:clamp(15.5px,1.8vw,19px);color:var(--ink-2);max-width:46ch;margin:20px auto 0;
+  text-shadow:0 2px 24px rgba(0,0,0,.85)}
 
-.ctrl{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:34px;
-  background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px}
+.scrollcue{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:4;
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--muted);display:none;flex-direction:column;align-items:center;gap:9px;pointer-events:none;
+  transition:opacity .4s ease}
+.gl-ready .scrollcue{display:flex}
+.scrollcue::after{content:"";width:1px;height:34px;
+  background:linear-gradient(var(--amber),transparent);animation:cue 1.9s ease-in-out infinite}
+@keyframes cue{0%,100%{opacity:.25;transform:scaleY(.55)}50%{opacity:1;transform:scaleY(1)}}
+
+/* live budget control, inside the final act */
+.ctrl{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:30px auto 0;max-width:620px;
+  background:rgba(17,21,27,.82);backdrop-filter:blur(14px);
+  border:1px solid var(--line-2);border-radius:13px;padding:16px 20px}
 .ctrl label{font-size:13px;color:var(--ink-2);font-weight:500;white-space:nowrap}
-.ctrl input[type=range]{flex:1;min-width:170px;accent-color:var(--amber);cursor:pointer}
+.ctrl input[type=range]{flex:1;min-width:150px;accent-color:var(--amber);cursor:pointer}
 .ctrl .out{font-family:"IBM Plex Mono",monospace;font-size:13.5px;color:var(--ink);white-space:nowrap}
 .ctrl .out b{color:var(--amber)} .ctrl .out i{font-style:normal;color:var(--save)}
+.meters{display:flex;gap:26px;justify-content:center;flex-wrap:wrap;margin-top:22px}
+.meter{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);letter-spacing:.06em}
+.meter b{display:block;font-family:"Bricolage Grotesque",sans-serif;font-weight:800;letter-spacing:-.03em;
+  font-size:30px;color:var(--ink);line-height:1.1}
+.meter.win b{color:var(--save)}
 
-/* ── sections ────────────────────────────────────────────────────────── */
+/* ── content ────────────────────────────────────────────────────────── */
+.content{position:relative;z-index:5;background:var(--bg);
+  box-shadow:0 -40px 120px 40px rgba(7,8,10,.98)}
+.content::before{content:"";display:block;height:1px;
+  background:linear-gradient(90deg,transparent,var(--amber-dim),transparent)}
 section{padding-block:66px;border-top:1px solid var(--line)}
+section:first-child{border-top:none}
 h2{font-size:clamp(28px,4.4vw,46px)}
 h2+.sub{font-size:17px;color:var(--ink-2);max-width:60ch;margin-top:16px}
 h3{font-size:18px;font-weight:700;letter-spacing:-.02em}
 
 .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:38px}
 @media (max-width:860px){.cards{grid-template-columns:1fr}}
+/* Grid items default to min-width:auto, so one unbreakable line inside a <pre>
+   (a long curl URL) drags its whole track wider than the viewport and makes the
+   page scroll sideways. Letting them shrink below min-content is the fix. */
+.card,.surf,.tier,.bstep{min-width:0}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px;
   box-shadow:var(--shadow);position:relative;overflow:hidden}
 .card .num{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--amber);
@@ -131,21 +177,18 @@ h3{font-size:18px;font-weight:700;letter-spacing:-.02em}
 .card h3{margin:12px 0 9px}
 .card p{font-size:14.5px;margin:0}
 
-/* integration */
 .surfaces{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:38px}
 @media (max-width:820px){.surfaces{grid-template-columns:1fr}}
 .surf{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px}
 .surf .ico{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;
-  background:color-mix(in srgb,var(--amber) 16%,transparent);border:1px solid var(--amber-dim);
-  font-size:18px;margin-bottom:14px}
+  background:rgba(240,160,60,.13);border:1px solid var(--amber-dim);font-size:18px;margin-bottom:14px}
 .surf h3{margin-bottom:8px}
 .surf p{font-size:14px;margin:0 0 12px}
 pre{background:var(--bg-2);border:1px solid var(--line);border-radius:10px;padding:14px;
-  overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:12.5px;line-height:1.65;
-  color:var(--ink);margin:0}
+  overflow-x:auto;max-width:100%;font-family:"IBM Plex Mono",monospace;font-size:12.5px;
+  line-height:1.65;color:var(--ink);margin:0}
 pre .c{color:var(--muted)} pre .k{color:var(--amber)} pre .s{color:var(--save)}
 
-/* pricing */
 .tiers{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:40px}
 @media (max-width:980px){.tiers{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:560px){.tiers{grid-template-columns:1fr}}
@@ -164,7 +207,6 @@ pre .c{color:var(--muted)} pre .k{color:var(--amber)} pre .s{color:var(--save)}
   background:var(--amber);border-radius:2px}
 .tier .btn{width:100%;justify-content:center;font-size:14px;padding:11px 16px}
 
-/* steps to buy */
 .buy{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:38px;counter-reset:b}
 @media (max-width:860px){.buy{grid-template-columns:1fr}}
 .bstep{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px}
@@ -173,7 +215,6 @@ pre .c{color:var(--muted)} pre .k{color:var(--amber)} pre .s{color:var(--save)}
 .bstep h3{font-size:16px;margin-bottom:7px}
 .bstep p{font-size:14px;margin:0}
 
-/* evidence */
 .tbl{overflow-x:auto;margin-top:30px}
 table{border-collapse:collapse;width:100%;font-size:14px;min-width:540px;background:var(--panel);
   border:1px solid var(--line);border-radius:12px;overflow:hidden}
@@ -192,14 +233,37 @@ tbody tr:last-child td{border-bottom:none}
 .final{text-align:center;padding-block:86px}
 .final h2{font-size:clamp(30px,5.4vw,56px)}
 .final .cta{justify-content:center}
-
 footer{padding-block:34px 72px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
 
+/* Reduced motion keeps the default stacked layout — scene.js never adds
+   .gl-ready in that case — so only the decorative animation needs disarming. */
 @media (prefers-reduced-motion:reduce){
-  .scene,.fr,.btn{transition:none!important}
   html{scroll-behavior:auto}
+  #loader .lb i{animation:none;width:100%}
+  .scrollcue::after{animation:none}
+  .btn{transition:none}
+}
+@media (max-width:760px){
+  .gl-ready #experience{height:460vh}
+  .act{padding-inline:20px}
 }
 </style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.min.js"}}
+</script>
+</head>
+<body>
+
+<div id="loader" aria-hidden="true">
+  <div class="lw">
+    <div class="lt">frameroute</div>
+    <div class="lb"><i></i></div>
+    <div class="ls">routing frames</div>
+  </div>
+</div>
+
+<div class="bgfall" aria-hidden="true"></div>
+<canvas id="gl" aria-hidden="true"></canvas>
 
 <nav>
   <div class="inner">
@@ -209,34 +273,60 @@ footer{padding-block:34px 72px;border-top:1px solid var(--line);color:var(--mute
       <a href="#use">Where it fits</a>
       <a href="#pricing">Pricing</a>
       <a href="#proof">Evidence</a>
-      <a href="evidence.html">Full results</a>
+      <a class="mini" href="evidence.html">Full results</a>
     </div>
   </div>
 </nav>
 
-<div class="wrap" id="top">
+<!-- ══ the scroll experience ══════════════════════════════════════════ -->
+<div id="experience" aria-label="Introduction">
+  <div class="acts">
 
-<header>
-  <div class="eyebrow">Video cost layer</div>
-  <h1>Stop paying to look at the <span class="lit">same frame</span> twice.</h1>
-  <p class="lede">An hour of video at 1&nbsp;fps is 3,600 calls to your vision model — and most of those frames are identical to the one before. frameroute sends only the frames that carry new information. Same answers. A fraction of the bill.</p>
-  <div class="cta">
-    <a class="btn p" href="mailto:baranitharan2020@gmail.com?subject=Frame%20Budget%20Audit%20request&amp;body=Hi%20-%20I%27d%20like%20a%20Frame%20Budget%20Audit.%20Here%27s%20one%20hour%20of%20our%20video%3A%20">Get a free Frame Budget Audit →</a>
-    <a class="btn g" href="#proof">See the measurements</a>
-  </div>
-  <div class="trust">3–4× fewer calls · ~80% lower spend · 1&nbsp;hr of video indexed in 5–13&nbsp;min</div>
+    <div class="act" data-act="0,0.26" id="top">
+      <div class="eyebrow">Video cost layer</div>
+      <h1>Stop paying to look at the <span class="lit">same frame</span> twice.</h1>
+      <p class="lede">An hour of video at 1&nbsp;fps is 3,600 calls to your vision model — and most of those frames are identical to the one before. frameroute sends only the frames that carry new information. Same answers. A fraction of the bill.</p>
+      <div class="cta">
+        <a class="btn p" href="mailto:baranitharan2020@gmail.com?subject=Frame%20Budget%20Audit%20request&amp;body=Hi%20-%20I%27d%20like%20a%20Frame%20Budget%20Audit.%20Here%27s%20one%20hour%20of%20our%20video%3A%20">Get a free Frame Budget Audit →</a>
+        <a class="btn g" href="#proof">See the measurements</a>
+      </div>
+      <div class="trust">3–4× fewer calls · ~80% lower spend · 1&nbsp;hr of video indexed in 5–13&nbsp;min</div>
+    </div>
 
-  <!-- 3D frame stack -->
-  <div class="stage" aria-hidden="true">
-    <div class="scene" id="scene"></div>
-  </div>
+    <div class="act mid" data-act="0.30,0.52">
+      <div class="actlabel">One hour of video · 1 fps</div>
+      <p class="bignum warn">3,600</p>
+      <p class="actsub">calls to your vision model, for a single hour. At $0.005 a call that is <strong>$18 an hour</strong> — and you pay it again for every hour in the archive.</p>
+    </div>
 
-  <div class="ctrl">
-    <label for="budget">Frame budget</label>
-    <input type="range" id="budget" min="1" max="8" step="1" value="5" aria-label="Frames kept out of every N">
-    <div class="out">keep <b id="ratio">1 in 5</b> · <i id="cut">80% fewer calls</i></div>
+    <div class="act mid" data-act="0.55,0.76">
+      <div class="actlabel">Step 01 · measure change</div>
+      <h2>Almost none of them are new.</h2>
+      <p class="actsub">A signal costing <strong>1–2&nbsp;ms per frame on CPU</strong> scores appearance, structure and motion with camera movement cancelled out. A held slide scores zero however long it stays up. What you see lighting up is that signal, running now.</p>
+    </div>
+
+    <div class="act mid" data-act="0.79,1.05">
+      <div class="actlabel">Step 02 · spend the budget</div>
+      <h2>Route in change, not in time.</h2>
+      <p class="actsub">The cumulative-change curve is cut into equal-area segments and one call is spent per segment. The frames below are picked by that exact rule — drag the budget and watch it re-route.</p>
+      <div class="ctrl">
+        <label for="budget">Frame budget</label>
+        <input type="range" id="budget" min="2" max="8" step="1" value="4" aria-label="Keep one frame in every N">
+        <div class="out">keep <b id="ratio">1 in 4</b> · <i id="cut">75% fewer calls</i></div>
+      </div>
+      <div class="meters">
+        <div class="meter">calls per hour<b id="liveCalls">900</b></div>
+        <div class="meter win">saved per hour<b id="liveSaved">$13.50</b></div>
+      </div>
+    </div>
+
   </div>
-</header>
+  <div class="scrollcue" aria-hidden="true">scroll</div>
+</div>
+
+<!-- ══ content ════════════════════════════════════════════════════════ -->
+<main class="content">
+<div class="wrap">
 
 <section id="how">
   <div class="eyebrow">How it works</div>
@@ -446,8 +536,8 @@ picks = Client(api_key=os.environ[<span class="s">"FR_KEY"</span>]).route(
   <div class="honest">
     <h3>What we don’t claim</h3>
     <p><strong>Our selection algorithm did not beat plain uniform sampling.</strong> At identical call counts it won one lecture by 25% and lost the other by 13%. The saving comes from <em>sending fewer frames</em> — not from our picker being cleverer than the ten lines you’d write yourself.</p>
-      <p>We also withdrew two earlier quality claims after better measurement contradicted them, and our evidence is two lectures, not a published benchmark. Continuous-motion footage — traffic, crowds, fast sport — is where routing helps least.</p>
-      <p style="margin-bottom:0">We publish this because the number is the product. A figure that collapses under your scrutiny would be worth less than nothing to both of us.</p>
+    <p>We also withdrew two earlier quality claims after better measurement contradicted them, and our evidence is two lectures, not a published benchmark. Continuous-motion footage — traffic, crowds, fast sport — is where routing helps least.</p>
+    <p style="margin-bottom:0">We publish this because the number is the product. A figure that collapses under your scrutiny would be worth less than nothing to both of us.</p>
   </div>
 </section>
 
@@ -519,59 +609,32 @@ frameroute cost your_video.mp4 --usd-per-call <span class="s">0.005</span></pre>
   Every figure on this page comes from a run you can reproduce on footage you supply.<br>
   <a href="mailto:baranitharan2020@gmail.com">baranitharan2020@gmail.com</a> · <a href="evidence.html">Full results and limitations</a>
 </footer>
+
 </div>
+</main>
 
 <script>
+/* Dismiss the loader on load, and unconditionally after 1.6s so a slow or
+   blocked CDN can never leave a visitor staring at a black screen. */
 (function(){
-  var scene = document.getElementById("scene"),
-      slider = document.getElementById("budget"),
-      ratioEl = document.getElementById("ratio"),
-      cutEl = document.getElementById("cut"),
-      N = 14, frames = [];
-  if(!scene) return;
+  var l = document.getElementById("loader"), done = false;
+  function hide(){ if(done) return; done = true; l.classList.add("done"); }
+  addEventListener("load", function(){ setTimeout(hide, 420); });
+  // `load` may already have fired by the time this runs (cached resources),
+  // in which case the listener above never calls back and the splash sticks.
+  if (document.readyState === "complete") setTimeout(hide, 420);
+  setTimeout(hide, 1600);
 
-  // Build the receding stack: each frame sits further back in Z and drifts right.
-  for(var i=0;i<N;i++){
-    var d = document.createElement("div");
-    d.className = "fr";
-    var z = -i*115, x = (i-(N-1)/2)*46, y = Math.sin(i*0.55)*12;
-    d.dataset.base = "translate3d("+x+"px,"+y+"px,"+z+"px) rotateY(-19deg)";
-    d.style.transform = d.dataset.base;
-    d.style.zIndex = String(N-i);
-    var t = document.createElement("span");
-    t.className = "tag"; t.textContent = "frame " + (i*37);
-    d.appendChild(t);
-    scene.appendChild(d); frames.push(d);
-  }
-
-  function apply(){
-    var keepEvery = parseInt(slider.value,10);
-    var kept = 0;
-    frames.forEach(function(f,i){
-      var keep = (i % keepEvery === 0);
-      if(keep) kept++;
-      f.classList.toggle("keep", keep);
-      f.classList.toggle("drop", !keep);
-      // kept frames step forward in Z so they read as "selected"
-      f.style.transform = f.dataset.base + (keep ? " translateZ(58px) scale(1.06)" : "");
-    });
-    ratioEl.textContent = "1 in " + keepEvery;
-    cutEl.textContent = Math.round((1 - 1/keepEvery)*100) + "% fewer calls";
-  }
-  slider.addEventListener("input", apply);
-  apply();
-
-  // Mouse parallax — tilt the whole scene, skipped when reduced motion is set.
-  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if(!reduce){
-    var stage = scene.parentElement;
-    stage.addEventListener("mousemove", function(e){
-      var r = stage.getBoundingClientRect(),
-          px = (e.clientX - r.left)/r.width - .5,
-          py = (e.clientY - r.top)/r.height - .5;
-      scene.style.transform = "rotateY("+(px*16)+"deg) rotateX("+(-py*11)+"deg)";
-    });
-    stage.addEventListener("mouseleave", function(){ scene.style.transform = ""; });
-  }
+  /* Hide the scroll cue once the visitor has started. */
+  var cue = document.querySelector(".scrollcue");
+  addEventListener("scroll", function(){
+    if(cue) cue.style.opacity = scrollY > 160 ? "0" : "1";
+  }, {passive:true});
 })();
 </script>
+<script type="module" src="scene.js"></script>
+<noscript>
+  <style>#loader{display:none}.acts{position:relative;display:block}.act{position:relative;opacity:1;margin-bottom:60px}#experience{height:auto;padding-block:120px 40px}</style>
+</noscript>
+</body>
+</html>

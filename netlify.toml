@@ -14,8 +14,13 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
 
-# Long-cache static assets, but always revalidate the HTML so edits go live.
+# Always revalidate the HTML and the scene module so edits go live immediately.
 [[headers]]
   for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/*.js"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
