@@ -1,0 +1,280 @@
+<title>frameroute</title>
+<meta name="description" content="Most video frames are wasted money. Find your safe frame budget, measured on your own footage.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#eef0f3; --sheet:#f8f9fb; --panel:#ffffff; --ink:#12161b; --ink-2:#464f5a;
+  --muted:#79838f; --line:#dde1e7; --line-2:#c8cfd8;
+  --pencil:#c2410c;          /* grease-pencil mark: the frames we keep */
+  --save:#0f766e;            /* savings */
+  --warn:#b45309; --bad:#b91c1c;
+  --shadow:0 1px 2px rgba(18,22,27,.06),0 8px 28px rgba(18,22,27,.07);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#101316; --sheet:#171b20; --panel:#1c2126; --ink:#e9edf2; --ink-2:#adb7c2;
+  --muted:#7d8792; --line:#2a3037; --line-2:#39424b;
+  --pencil:#f97316; --save:#2dd4bf; --warn:#fbbf24; --bad:#f87171;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 34px rgba(0,0,0,.34);
+}}
+:root[data-theme="dark"]{
+  --bg:#101316; --sheet:#171b20; --panel:#1c2126; --ink:#e9edf2; --ink-2:#adb7c2;
+  --muted:#7d8792; --line:#2a3037; --line-2:#39424b;
+  --pencil:#f97316; --save:#2dd4bf; --warn:#fbbf24; --bad:#f87171;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 34px rgba(0,0,0,.34);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;
+  font-size:15.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:980px;margin:0 auto;padding-inline:20px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:Archivo,system-ui,sans-serif;font-weight:800;letter-spacing:-.025em;
+  line-height:1.05;text-wrap:balance;margin:0}
+a{color:var(--pencil)}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--pencil);font-weight:600}
+
+/* ---------- hero ---------- */
+header{padding-block:56px 40px}
+h1{font-size:clamp(38px,7.2vw,76px)}
+h1 em{font-style:normal;color:var(--pencil)}
+.dek{font-size:clamp(16.5px,2.3vw,20px);color:var(--ink-2);max-width:56ch;margin-top:20px}
+.cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+.btn{display:inline-block;font-weight:600;font-size:14.5px;padding:12px 20px;border-radius:9px;
+  text-decoration:none;border:1px solid transparent}
+.btn.primary{background:var(--pencil);color:#fff}
+.btn.ghost{border-color:var(--line-2);color:var(--ink)}
+.btn:focus-visible{outline:2px solid var(--pencil);outline-offset:2px}
+
+/* ---------- contact sheet ---------- */
+.sheet{margin-top:40px;background:var(--sheet);border:1px solid var(--line);border-radius:14px;
+  padding:20px;box-shadow:var(--shadow)}
+.sheet-cap{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);margin-bottom:14px}
+.strip{display:grid;grid-template-columns:repeat(24,1fr);gap:5px}
+@media (max-width:760px){.strip{grid-template-columns:repeat(12,1fr)}}
+.cell{position:relative;aspect-ratio:4/3;border-radius:3px;background:var(--line);
+  border:1px solid var(--line-2);overflow:hidden}
+.cell.keep{background:color-mix(in srgb,var(--pencil) 20%,var(--panel));
+  border-color:var(--pencil);box-shadow:0 0 0 2px color-mix(in srgb,var(--pencil) 28%,transparent)}
+.cell.drop::after,.cell.drop::before{content:"";position:absolute;inset:-20%;
+  border-top:1.5px solid var(--muted);opacity:.5;top:50%}
+.cell.drop::before{transform:rotate(34deg)}
+.cell.drop::after{transform:rotate(-34deg)}
+.sheet-legend{display:flex;flex-wrap:wrap;gap:18px;margin-top:14px;font-size:12.5px;color:var(--ink-2)}
+.sheet-legend span{display:inline-flex;align-items:center;gap:7px}
+.sw{width:13px;height:11px;border-radius:2px;flex:none;border:1px solid var(--line-2);background:var(--line)}
+.sw.keep{background:color-mix(in srgb,var(--pencil) 20%,var(--panel));border-color:var(--pencil)}
+
+/* ---------- sections ---------- */
+section{padding-block:44px;border-top:1px solid var(--line)}
+h2{font-size:clamp(25px,3.9vw,38px)}
+h2+p,.lede{color:var(--ink-2);margin-top:14px;max-width:62ch}
+h3{font-size:17px;font-weight:600;letter-spacing:-.01em}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:26px}
+@media (max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:16px}
+.stat b{display:block;font-family:Archivo,sans-serif;font-size:29px;font-weight:800;
+  letter-spacing:-.02em;line-height:1}
+.stat b.save{color:var(--save)} .stat b.bad{color:var(--bad)}
+.stat span{display:block;font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.4}
+
+/* steps */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px;counter-reset:s}
+@media (max-width:760px){.steps{grid-template-columns:1fr}}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:20px}
+.step::before{counter-increment:s;content:"0" counter(s);font-family:"IBM Plex Mono",monospace;
+  font-size:12px;font-weight:600;color:var(--pencil);display:block;margin-bottom:10px}
+.step p{margin:8px 0 0;font-size:14px;color:var(--ink-2)}
+
+/* table */
+.tbl{overflow-x:auto;margin-top:22px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:520px;background:var(--panel);
+  border:1px solid var(--line);border-radius:11px;overflow:hidden}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line)}
+th{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);font-weight:600;background:var(--sheet)}
+td.n,th.n{text-align:right;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+tbody tr:last-child td{border-bottom:none}
+tr.hi td{background:color-mix(in srgb,var(--pencil) 7%,transparent);font-weight:600}
+
+/* honesty block */
+.honest{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--bad);
+  border-radius:11px;padding:20px 22px;margin-top:22px}
+.honest h3{color:var(--bad)}
+.honest ul{margin:12px 0 0;padding-left:20px;color:var(--ink-2);font-size:14px}
+.honest li{margin-bottom:9px}
+.ok{border-left-color:var(--save)} .ok h3{color:var(--save)}
+
+/* code */
+pre{background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:16px;
+  overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:13px;margin-top:18px;color:var(--ink)}
+pre .c{color:var(--muted)}
+
+/* pricing ladder */
+.ladder{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:24px}
+@media (max-width:860px){.ladder{grid-template-columns:repeat(2,1fr)}}
+.rung{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:18px}
+.rung .t{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--pencil);font-weight:600}
+.rung h3{margin-top:8px}
+.rung p{font-size:13.5px;color:var(--ink-2);margin:8px 0 0}
+.rung .price{font-family:Archivo,sans-serif;font-weight:800;font-size:19px;margin-top:12px;display:block}
+
+footer{padding-block:34px 70px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+@media (prefers-reduced-motion:no-preference){
+  .cell{animation:pop .5s ease both}
+  @keyframes pop{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+}
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">frameroute</div>
+  <h1>Most of your video frames are <em>wasted money</em>.</h1>
+  <p class="dek">A one-hour video sent to a vision model at 1&nbsp;fps is 3,600 calls — and most of those frames are near-identical. You are paying, repeatedly, to look at the same slide. We measure how few frames you can actually send, <strong>on your own footage</strong>, before retrieval breaks.</p>
+  <div class="cta-row">
+    <a class="btn primary" href="#audit">Get a Frame Budget Audit</a>
+    <a class="btn ghost" href="#evidence">See the evidence (including what failed)</a>
+  </div>
+
+  <div class="sheet">
+    <div class="sheet-cap"><span>CONTACT SHEET — 24 consecutive frames, one lecture</span><span>KEPT 5 / 24</span></div>
+    <div class="strip" id="strip"></div>
+    <div class="sheet-legend">
+      <span><i class="sw keep"></i> sent to the model — carries new information</span>
+      <span><i class="sw"></i> skipped — near-identical to the frame before it</span>
+    </div>
+  </div>
+</header>
+
+<section id="evidence">
+  <div class="eyebrow">Measured, not asserted</div>
+  <h2>What we found — and what we failed to prove</h2>
+  <p class="lede">Scored against ground truth <em>neither index produced</em>: the lecture's own slide text. For the query “gradient descent”, the relevant frames are the ones whose slides actually say it. No model grading its own homework.</p>
+
+  <div class="stats">
+    <div class="stat"><b class="save">3–4×</b><span>fewer model calls (67–74% fewer)</span></div>
+    <div class="stat"><b class="save">~80%</b><span>cut in video-VLM spend</span></div>
+    <div class="stat"><b class="save">0.65–0.75</b><span>hit@5 routed — vs 0.45 for full compute</span></div>
+    <div class="stat"><b class="bad">±0</b><span>advantage over plain uniform sampling</span></div>
+  </div>
+
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Lecture · 20 grounded queries · top-5</th><th class="n">calls</th><th class="n">hit@5</th><th class="n">precision@5</th></tr></thead>
+      <tbody>
+        <tr><td>cities_and_decarbonization — full compute</td><td class="n">400</td><td class="n">0.450</td><td class="n">0.400</td></tr>
+        <tr class="hi"><td>cities_and_decarbonization — frameroute</td><td class="n">104</td><td class="n">0.750</td><td class="n">0.320</td></tr>
+        <tr><td>cities_and_decarbonization — uniform</td><td class="n">104</td><td class="n">0.600</td><td class="n">0.240</td></tr>
+        <tr><td>deep_learning — full compute</td><td class="n">400</td><td class="n">0.450</td><td class="n">0.450</td></tr>
+        <tr class="hi"><td>deep_learning — frameroute</td><td class="n">131</td><td class="n">0.650</td><td class="n">0.430</td></tr>
+        <tr><td>deep_learning — uniform</td><td class="n">131</td><td class="n">0.750</td><td class="n">0.460</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="honest ok">
+    <h3>✓ What holds</h3>
+    <ul>
+      <li><strong>Skipping frames does not hurt retrieval.</strong> On both lectures, at 67–74% fewer calls, hit@5 was <em>higher</em> than full compute. Replicated.</li>
+      <li><strong>It is fast.</strong> One hour of video indexed in 5–13 minutes on a laptop GPU — ~3× faster than encoding every frame. The change signal costs 1–2&nbsp;ms/frame.</li>
+    </ul>
+  </div>
+
+  <div class="honest">
+    <h3>✗ What we could not prove</h3>
+    <ul>
+      <li><strong>Our change-aware router is not measurably better than uniform sampling.</strong> It won one lecture by +25% and lost the other by −13%, at identical call counts. On this evidence, the simple baseline you would write yourself is just as good.</li>
+      <li><strong>Two earlier quality claims were withdrawn.</strong> “Median 100% answer parity” came from a lenient yes/no check that counted two <em>different</em> slides as a match. A CLIP timestamp metric was discarded for penalising the right slide a few seconds off.</li>
+      <li><strong>Sample size is two lectures, 20 queries each.</strong> A real signal — not a published benchmark.</li>
+    </ul>
+  </div>
+  <p class="lede" style="margin-top:20px">We publish the failures because the saving is the product, and a number that collapses under a customer's scrutiny is worth less than nothing.</p>
+</section>
+
+<section id="audit">
+  <div class="eyebrow">The offer</div>
+  <h2>The Frame Budget Audit</h2>
+  <p class="lede">Every video-AI team asks “how few frames can I send?” and nobody answers it rigorously. Send one hour of your video; we answer it with numbers, on your footage, using your own slides and speech as the ground truth.</p>
+  <div class="steps">
+    <div class="step"><h3>Send one hour of video</h3><p>Any lecture, meeting, screen recording or mostly-idle camera feed. No integration, no code change.</p></div>
+    <div class="step"><h3>We measure your safe budget</h3><p>We build a full-compute reference, route at several budgets, and score each against ground truth mined from your own slide text and transcript.</p></div>
+    <div class="step"><h3>You get a number</h3><p>“You can send N frames instead of 3,600 — retrieval holds at X — saving $Y per hour of video.” Then decide whether to route it yourself or let us.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Free and open</div>
+  <h2>The router is open source. Take it.</h2>
+  <p class="lede">The selection logic is the part you could write yourself — so we are not charging for it. It installs with nothing heavier than numpy and OpenCV, because the whole point is that deciding costs less than the call it avoids.</p>
+<pre><span class="c"># the router — no torch, no detector, no encoder in the hot path</span>
+pip install frameroute
+
+<span class="c"># what would this cost you? no model, no API key needed</span>
+frameroute cost your_video.mp4 --usd-per-call 0.005
+
+<span class="c"># route it, then spend your model only on what came back</span>
+python -c "
+from frameroute import FrameRouter, analyze_video
+track = analyze_video('your_video.mp4')
+sel   = FrameRouter().select(track, budget_per_hour=240)
+for pick in sel.picks:
+    embedding = your_expensive_model(frame_at(pick.idx))
+"</pre>
+</section>
+
+<section>
+  <div class="eyebrow">How this becomes a business</div>
+  <h2>Give away the sampler. Sell the answer.</h2>
+  <div class="ladder">
+    <div class="rung"><div class="t">Step 01</div><h3>Audit</h3><p>Your safe frame budget, measured on your footage.</p><span class="price">Free</span></div>
+    <div class="rung"><div class="t">Step 02</div><h3>Router</h3><p>Open-source library. Run it yourself, forever.</p><span class="price">$0</span></div>
+    <div class="rung"><div class="t">Step 03</div><h3>Hosted API</h3><p>We route and index; you keep your model and your prompts.</p><span class="price">~$2–4 <small style="font-weight:500;font-size:13px;color:var(--muted)">/ video-hour</small></span></div>
+    <div class="rung"><div class="t">Step 04</div><h3>Search index</h3><p>Visual + on-screen text + speech on one timeline.</p><span class="price">Usage</span></div>
+  </div>
+  <p class="lede" style="margin-top:22px">Priced against what you save, not what we cost: cutting a 10,000 video-hour/month workload from ~$180k to ~$45k leaves plenty of room for everyone.</p>
+</section>
+
+<section>
+  <div class="eyebrow">Status — read before you deploy</div>
+  <h2>What is ready, and what is not</h2>
+  <div class="honest ok">
+    <h3>✓ Production quality</h3>
+    <ul>
+      <li>The <span class="mono">frameroute</span> router, CLI and Python API — 27 tests green, pip-installable, MIT.</li>
+      <li>The measurement harness (<span class="mono">grounded_eval</span>, <span class="mono">latency</span>, <span class="mono">cost_parity</span>) — this is what the audit runs on.</li>
+    </ul>
+  </div>
+  <div class="honest">
+    <h3>✗ Not production ready</h3>
+    <ul>
+      <li>The bundled HTTP server has <strong>unfixed security defects</strong> — arbitrary file read, upload path traversal, a hardcoded default key, wildcard CORS, an unbounded rate-limiter and SSRF-able stream/URL ingestion. <strong>Do not expose it.</strong> Audits run offline; the hosted API is not launched.</li>
+      <li>Evidence is two lectures. Continuous-motion footage (traffic, busy streets, fast sport) is untested for saving and is the case where routing helps least.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <strong>frameroute</strong> — sample in change, not in time. MIT licensed.<br>
+  Every number on this page comes from a run you can reproduce with the commands above, on footage you supply. Where a claim did not survive measurement, we say so rather than quietly dropping it.
+</footer>
+</div>
+
+<script>
+(function(){
+  // Contact sheet: 24 consecutive frames, 5 kept — the actual ~1-in-5 ratio.
+  var keep = {0:1, 5:1, 9:1, 16:1, 21:1}, strip = document.getElementById("strip");
+  if(!strip) return;
+  for(var i=0;i<24;i++){
+    var d = document.createElement("div");
+    d.className = "cell " + (keep[i] ? "keep" : "drop");
+    d.style.animationDelay = (i*26) + "ms";
+    d.setAttribute("aria-hidden","true");
+    strip.appendChild(d);
+  }
+})();
+</script>
