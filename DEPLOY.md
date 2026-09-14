@@ -54,7 +54,9 @@ Connect the repo. **Build command:** _(none)_ · **Output directory:** `website`
 
 - [ ] **Swap the contact address.** Every CTA currently mails
       `baranitharan2020@gmail.com`. Replace it with a business address or a
-      Calendly link — search the file for `mailto:` (4 places incl. the footer).
+      Calendly link — **8 places**: 7 in `index.html` (hero, pricing tier,
+      the four cards in "How to reach us", final CTA, footer) and 1 in
+      `evidence.html`. Find them with `grep -n "mailto:" *.html`.
 - [ ] **Replace `YOUR-DOMAIN.com`** in `robots.txt` and `sitemap.xml`.
 - [ ] **Add an OG image** (1200×630 PNG) and reference it with
       `<meta property="og:image">` — link previews are much stronger with one.
