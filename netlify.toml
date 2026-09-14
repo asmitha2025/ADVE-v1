@@ -1,0 +1,21 @@
+# Static site — no build step. Works as-is on Netlify.
+# (Vercel/Cloudflare Pages: set build command = none, output directory = website)
+
+[build]
+  publish = "."
+  command = ""
+
+# Sensible security headers for a static marketing site.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# Long-cache static assets, but always revalidate the HTML so edits go live.
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
