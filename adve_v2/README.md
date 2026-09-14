@@ -263,13 +263,18 @@ adve_v2/
   promise it never skipped a large measured change. It cannot promise the
   change mattered. Any product copy saying "zero missed events" without a
   labelled event list is doing what the v3.1 docs did.
-- **The router's edge is domain-specific.** It beats uniform sampling on
-  unevenly-paced footage (lectures, meetings, mostly-idle CCTV) and only
-  ties it on continuous motion (traffic, busy streets, fast sports). Measured,
-  not assumed — so don't sell it on the footage where it ties.
-- **Sample size is small.** The results above are single-clip-per-domain with
-  coarse query sets. A strong directional signal, not a published benchmark;
-  the rigorous graded metric (`bench/answer_grade.py`) needs a paid vision key.
+- **The router has no demonstrated edge over uniform sampling.** At matched
+  call counts on grounded evaluation it won one lecture (+25%) and lost the
+  other (−13%). *Skipping* frames is what saves the money; our choice of
+  *which* frames is not yet shown to beat the obvious baseline a customer
+  would write in ten lines. Sell the saving, not the algorithm.
+- **Sample size is small and the metrics are genuinely hard.** Two clips, 20
+  queries each. Three quality metrics were tried and two discarded: a lenient
+  yes/no VLM check (it counted two *different* slides as a match) and CLIP
+  timestamp-recall (it penalises returning the right slide a few seconds off).
+  A strict free-form judge (`bench/answer_grade.py`) scored 20–35% but marks a
+  frame 7 seconds from the reference a miss. Trust `bench/grounded_eval.py`,
+  which scores against the slides' own text rather than a model judging itself.
 - **The architecture is not novel.** Change-aware sampling is prior art
   (Deep Feature Flow, CoViAR, AdaFocus, Skip-Convolutions, Eventful
   Transformers, SCSampler). The value is execution, honesty, and integration —
