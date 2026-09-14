@@ -1,17 +1,30 @@
 # Deploying the frameroute site
 
-Static files, no build step, no framework. Everything is inline except Google
-Fonts, so any static host will serve it as-is.
+Static files, no build step, no framework. CSS and page scripts are inline; the
+only external requests are Google Fonts and Three.js from jsDelivr, so any
+static host will serve it as-is.
 
 ```
 website/
-  index.html      landing page (3D hero, pricing, integrations)
+  index.html      landing page — scroll-driven WebGL scene, pricing, integrations
+  scene.js        the 3D scene (ES module, imports Three.js from jsDelivr)
   evidence.html   the measurements, including what failed
   netlify.toml    publish config + security headers
   robots.txt      ← replace YOUR-DOMAIN.com
   sitemap.xml     ← replace YOUR-DOMAIN.com
   DEPLOY.md       this file
 ```
+
+**The 3D scene degrades safely.** If WebGL is unavailable, the CDN is blocked,
+or JavaScript is off, the canvas is hidden, a CSS gradient takes its place and
+every word of the page still reads. The loader dismisses itself after 1.6s no
+matter what, so a slow CDN can never leave a visitor on a black screen. With
+`prefers-reduced-motion` the scroll journey flattens into ordinary stacked
+sections.
+
+**One deliberate inconsistency:** `index.html` is committed to dark (a lit
+corridor of frames only reads against black); `evidence.html` follows the
+visitor's system theme. That is intentional, not a bug.
 
 ---
 
