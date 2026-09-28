@@ -359,7 +359,7 @@ def _score_gates(report: BenchReport) -> None:
 # cli
 # --------------------------------------------------------------------------
 
-def main() -> None:
+def main() -> int:
     import argparse
     from frameroute.adapters import ClipEmbedder
     from bench.queries import QuerySet, DEFAULT_QUERIES, queries_for
@@ -417,7 +417,10 @@ def main() -> None:
     print(report.to_markdown())
     print()
     print(f"[gate2] wrote {args.out} and {args.md}")
+    passed = (report.gate2_verdict.startswith("PASS")
+              and report.gate3_verdict.startswith("PASS"))
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

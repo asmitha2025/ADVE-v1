@@ -1,5 +1,12 @@
 # ADVE Phase 1 Integration & Execution Guide
 
+> **Outdated — kept for history.** This guide describes the learned
+> `DeltaReconstructor` stack that the September 2026 audit retired: on
+> retrieval it did not beat parameter-free fills, and the pipeline is now
+> CLIP-only. The files named below (`reconstructor_v2.py`,
+> `batch_tracker.py`, ...) no longer exist in this repo. For the current
+> stack and its measured results, see [`README.md`](README.md).
+
 This document details the step-by-step procedure to integrate the **Learned DeltaReconstructor**, **Batched YOLO Tracker**, and **Edge-Case Hardening** into your existing ADVE video analytics pipeline.
 
 ---

@@ -4,6 +4,7 @@ frameroute.cli — command line entry point.
     python -m frameroute route   VIDEO --budget-per-hour 240
     python -m frameroute signals VIDEO
     python -m frameroute cost    VIDEO --usd-per-call 0.002
+    python -m frameroute audit   VIDEO --price-per-call 0.005 --volume-hours 500
     python -m frameroute gate1   VIDEO
     python -m frameroute gate2   VIDEO
 
@@ -67,6 +68,39 @@ def _cmd_route(a) -> int:
     return 0
 
 
+def _cmd_cascade(a) -> int:
+    from .cascade import route_cascade
+    import json
+    track = None
+    rep = route_cascade(
+        a.video,
+        expensive_budget=a.expensive_budget,
+        expensive_budget_per_hour=a.expensive_budget_per_hour,
+        cheap_budget=a.cheap_budget,
+        cheap_budget_per_hour=a.cheap_budget_per_hour,
+        policy=a.policy,
+        weights=a.weights,
+        stride=a.stride,
+        max_frames=a.max_frames,
+        cheap_cost_per_call=a.cheap_cost,
+        expensive_cost_per_call=a.expensive_cost,
+    )
+    print(f"video            {rep.video_path}")
+    print(f"duration         {rep.duration_sec:.1f}s")
+    print(f"frames analyzed  {rep.frames_analyzed}")
+    print(f"expensive calls  {rep.expensive.n_calls}  (${rep.expensive.cost_per_call_usd:.4f}/call = ${rep.expensive.total_cost_usd:.2f})")
+    print(f"cheap calls      {rep.cheap.n_calls}  (${rep.cheap.cost_per_call_usd:.4f}/call = ${rep.cheap.total_cost_usd:.2f})")
+    print(f"total calls      {rep.total_calls}")
+    print(f"total cost       ${rep.total_cost_usd:.2f}")
+    print(f"calls/hour       {rep.calls_per_hour:.0f}")
+    print(f"cost/hour        ${rep.total_cost_usd / (rep.duration_sec/3600.0):.2f}")
+    print(f"tiers            {rep.indices_by_tier()}")
+    if a.out:
+        rep.to_json(a.out)
+        print(f"wrote {a.out}")
+    return 0
+
+
 def _cmd_cost(a) -> int:
     """Price a routing decision without running any model."""
     from .router import FrameRouter
@@ -102,18 +136,23 @@ def _cmd_cost(a) -> int:
     return 0
 
 
+def _cmd_audit(a) -> int:
+    """The Frame Budget Audit: one command, one customer-ready page."""
+    from bench.audit import main as audit_main
+    sys.argv = ["audit", "--video", a.video] + a.rest
+    return audit_main()
+
+
 def _cmd_gate1(a) -> int:
     from bench.parity import main as gate1_main
     sys.argv = ["parity", "--video", a.video] + a.rest
-    gate1_main()
-    return 0
+    return gate1_main()
 
 
 def _cmd_gate2(a) -> int:
     from bench.routing_bench import main as gate2_main
     sys.argv = ["routing_bench", "--video", a.video] + a.rest
-    gate2_main()
-    return 0
+    return gate2_main()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -153,6 +192,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--budget-per-hour", type=float, default=240.0)
     p.add_argument("--usd-per-call", type=float, default=0.002)
     p.set_defaults(fn=_cmd_cost)
+
+    p = sub.add_parser("cascade", help="two-tier routing: cheap tier + expensive tier")
+    common(p)
+    p.add_argument("--expensive-budget", type=int, default=None)
+    p.add_argument("--expensive-budget-per-hour", type=float, default=None)
+    p.add_argument("--cheap-budget", type=int, default=None)
+    p.add_argument("--cheap-budget-per-hour", type=float, default=None)
+    p.add_argument("--policy", default="coverage",
+                   help="coverage | peak | hybrid")
+    p.add_argument("--expensive-cost", type=float, default=0.005,
+                   help="USD per expensive call (e.g. VLM)")
+    p.add_argument("--cheap-cost", type=float, default=0.0002,
+                   help="USD per cheap call (e.g. CLIP)")
+    p.add_argument("--out", default="")
+    p.set_defaults(fn=_cmd_cascade)
+
+    p = sub.add_parser("audit", help="Frame Budget Audit: calls, money, retrieval, speed")
+    p.add_argument("video")
+    p.add_argument("rest", nargs=argparse.REMAINDER)
+    p.set_defaults(fn=_cmd_audit)
 
     p = sub.add_parser("gate1", help="run the retrieval parity experiment")
     p.add_argument("video")

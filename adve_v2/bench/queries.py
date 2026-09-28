@@ -275,6 +275,18 @@ def scaffold_repo_query_sets(out_dir: str = "bench/query_sets") -> List[str]:
     return written
 
 
-if __name__ == "__main__":
-    for p in scaffold_repo_query_sets():
+def main() -> int:
+    import argparse
+    ap = argparse.ArgumentParser(
+        description="Scaffold one query-set stub per test video in this repo."
+    )
+    ap.add_argument("--out", default="bench/query_sets",
+                    help="directory to write the query-set JSON files into")
+    a = ap.parse_args()
+    for p in scaffold_repo_query_sets(a.out):
         print("wrote", p)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

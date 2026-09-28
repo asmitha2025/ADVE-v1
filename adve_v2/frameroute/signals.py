@@ -37,7 +37,7 @@ homography on 720p.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, replace
 from typing import Dict, List, Optional, Tuple
 
 import cv2
@@ -89,6 +89,27 @@ class SignalTrack:
 
     def novelty_array(self) -> np.ndarray:
         return np.asarray([s.novelty for s in self.signals], dtype=np.float64)
+
+    def with_novelty(self, novelty) -> "SignalTrack":
+        """
+        Copy of this track with a replaced novelty array.
+
+        Used by frameroute.semantics to fuse content-space novelty as a floor
+        on top of the pixel signals without touching any other field.
+        """
+        nov = np.asarray(novelty, dtype=np.float64).reshape(-1)
+        if nov.size != len(self.signals):
+            raise ValueError(
+                f"novelty has {nov.size} values for {len(self.signals)} signals"
+            )
+        return SignalTrack(
+            video_path=self.video_path,
+            fps=self.fps,
+            n_frames_total=self.n_frames_total,
+            stride=self.stride,
+            signals=[replace(s, novelty=float(v)) for s, v in zip(self.signals, nov)],
+            analyze_seconds=self.analyze_seconds,
+        )
 
     def time_array(self) -> np.ndarray:
         return np.asarray([s.t for s in self.signals], dtype=np.float64)

@@ -9,7 +9,7 @@ class Config:
 
     # --- Anchor Refresh Triggers ---
     SPATIAL_THRESHOLD: float = 0.30       # normalized ΔG magnitude
-    APPEARANCE_THRESHOLD: float = 0.15    # histogram correlation drop
+    APPEARANCE_THRESHOLD: float = 0.08    # histogram correlation drop (tuned for slide cuts & transitions)
     MAX_DELTA_FRAMES: int = 30            # force keyframe every N frames regardless
 
     # --- Validation ---

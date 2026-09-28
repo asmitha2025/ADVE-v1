@@ -1,12 +1,85 @@
 import os
 import numpy as np
-import faiss
 import json
 import sqlite3
 import cv2
 from pathlib import Path
 from typing import List, Dict, Optional
 from dataclasses import dataclass
+
+# FAISS is an optimisation, not a requirement. On machines where the wheel's
+# native DLL cannot load (e.g. Windows Smart App Control blocks the unsigned
+# _swigfaiss.pyd), fall back to exact inner-product search in NumPy. Exact
+# search is slower on million-vector indexes but returns the true nearest
+# neighbours, so results are identical or better.
+try:
+    import faiss
+    FAISS_AVAILABLE = True
+    FAISS_IMPORT_ERROR = None
+except Exception as _faiss_err:  # ImportError, or OSError from a DLL policy block
+    faiss = None
+    FAISS_AVAILABLE = False
+    FAISS_IMPORT_ERROR = _faiss_err
+
+
+class NumpyFlatIP:
+    """Drop-in stand-in for ``faiss.IndexFlatIP`` using exact NumPy."""
+
+    def __init__(self, dim: int):
+        self.dim = int(dim)
+        self.vectors = np.zeros((0, self.dim), dtype=np.float32)
+
+    @property
+    def ntotal(self) -> int:
+        return int(self.vectors.shape[0])
+
+    def add(self, x: np.ndarray) -> None:
+        x = np.asarray(x, dtype=np.float32).reshape(-1, self.dim)
+        if x.shape[0] == 0:
+            return
+        self.vectors = np.vstack([self.vectors, x]) if self.ntotal else x.copy()
+
+    def reconstruct(self, i: int) -> np.ndarray:
+        return self.vectors[int(i)]
+
+    def search(self, q: np.ndarray, k: int):
+        k = min(int(k), self.ntotal)
+        if k <= 0:
+            return (np.zeros((1, 0), dtype=np.float32),
+                    np.zeros((1, 0), dtype=np.int64))
+        sims = self.vectors @ np.asarray(q, dtype=np.float32).reshape(-1)
+        order = np.argsort(-sims)[:k]
+        return (sims[order].reshape(1, -1).astype(np.float32),
+                order.reshape(1, -1).astype(np.int64))
+
+
+if not FAISS_AVAILABLE:  # pragma: no cover - depends on the host
+    print(f"[adve.search.index] FAISS unavailable ({FAISS_IMPORT_ERROR}); "
+          "using exact NumPy inner-product search.")
+
+
+def empty_index(dim: int):
+    """A new flat inner-product index (FAISS when loadable, NumPy otherwise)."""
+    return faiss.IndexFlatIP(dim) if FAISS_AVAILABLE else NumpyFlatIP(dim)
+
+
+def read_index(path: Path, dim: int):
+    path = Path(path)
+    if FAISS_AVAILABLE:
+        return faiss.read_index(str(path)) if path.exists() else faiss.IndexFlatIP(dim)
+    npy_path = path.with_suffix(".npy")
+    idx = NumpyFlatIP(dim)
+    if npy_path.exists():
+        idx.vectors = np.load(str(npy_path)).astype(np.float32)
+    return idx
+
+
+def write_index(index, path: Path) -> None:
+    path = Path(path)
+    if FAISS_AVAILABLE:
+        faiss.write_index(index, str(path))
+    else:
+        np.save(path.with_suffix(".npy"), getattr(index, "vectors", np.zeros((0, index.dim), dtype=np.float32)))
 
 
 def normalize_video_path(video_path: str) -> str:
@@ -64,12 +137,9 @@ class ADVESearchIndex:
                 
         self.dim = dim
 
-        # FAISS index — inner product on normalized vectors = cosine similarity
-        faiss_path = self.index_dir / "embeddings.faiss"
-        if faiss_path.exists():
-            self.faiss_index = faiss.read_index(str(faiss_path))
-        else:
-            self.faiss_index = faiss.IndexFlatIP(dim)
+        # Vector index — inner product on normalized vectors = cosine similarity
+        self._index_path = self.index_dir / "embeddings.faiss"
+        self.faiss_index = read_index(self._index_path, dim)
 
         # SQLite for metadata with WAL mode & 30s timeout for concurrent safety
         self.db = sqlite3.connect(
@@ -390,13 +460,11 @@ class ADVESearchIndex:
         return results
 
     def save(self):
-        faiss.write_index(
-            self.faiss_index, str(self.index_dir / "embeddings.faiss")
-        )
+        write_index(self.faiss_index, self._index_path)
 
     def clear(self):
         """Clear all embeddings and transcripts from the index and database."""
-        self.faiss_index = faiss.IndexFlatIP(self.dim)
+        self.faiss_index = empty_index(self.dim)
         self.db.execute("DELETE FROM embeddings")
         self.db.execute("DELETE FROM transcripts")
         self.db.execute("DELETE FROM sqlite_sequence WHERE name IN ('embeddings', 'transcripts')")
@@ -414,12 +482,12 @@ class ADVESearchIndex:
         cursor = self.db.execute("SELECT DISTINCT video_path, camera_id FROM embeddings")
         videos = [{"video_path": row[0], "camera_id": row[1]} for row in cursor.fetchall()]
         
+        index_file = self._index_path if self._index_path.exists() else self._index_path.with_suffix(".npy")
         return {
             "total_embeddings": count,
             "anchor_frames":    anchors,
             "delta_frames":     count - anchors,
-            "index_size_mb":    round(
-                (self.index_dir / "embeddings.faiss").stat().st_size / 1e6, 2
-            ) if (self.index_dir / "embeddings.faiss").exists() else 0,
+            "index_size_mb":    round(index_file.stat().st_size / 1e6, 2) if index_file.exists() else 0,
+            "backend":          "faiss" if FAISS_AVAILABLE else "numpy-exact",
             "indexed_videos":   videos,
         }

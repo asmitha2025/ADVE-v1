@@ -171,11 +171,17 @@ class QualityTestSuite:
                     h2 = cv2.calcHist([frame],[0,1,2],None,[8,8,8],[0,256]*3)
                     c1 = cv2.normalize(h1,h1).flatten()
                     c2 = cv2.normalize(h2,h2).flatten()
-                    app_delta = float(1.0 - cv2.compareHist(c1,c2,cv2.HISTCMP_CORREL))
+                    hist_diff = float(1.0 - cv2.compareHist(c1,c2,cv2.HISTCMP_CORREL))
+
+                    g1 = cv2.resize(cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY), (160, 120))
+                    g2 = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (160, 120))
+                    mae_diff = float(np.mean(np.abs(g1.astype(float) - g2.astype(float))) / 255.0)
+
+                    app_delta = max(hist_diff, mae_diff * 2.0)
 
                 is_anchor = (
                     anchor_emb is None or
-                    app_delta > 0.15 or
+                    app_delta > 0.08 or
                     frames_since_anchor >= 30
                 )
 

@@ -15,6 +15,10 @@ yolov8n.pt
 adve_v2/yolov8m.pt
 adve_v2/yolov8n.pt
 
+# Benchmark footage (multi-GB, local only — never commit)
+dataset_lectures/
+Testing videos/
+
 # Transient Media & Cache
 .gradio/
 clips/
@@ -34,3 +38,9 @@ adve_v2/clips/
 *.egg-info/
 build/
 dist/
+
+# Local runtime state / scratch databases
+outputs/adve_state.db
+adve_v2/adve_v2/data/auth.db
+adve_v2/data/truth_verification_index/
+*.faiss.bak

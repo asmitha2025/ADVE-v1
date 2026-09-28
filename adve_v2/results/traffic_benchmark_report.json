@@ -1,0 +1,31 @@
+{
+  "benchmark": "Traffic Surveillance Video Comparison",
+  "video_file": "North.mp4",
+  "total_frames_evaluated": 300,
+  "normal_model": {
+    "time_taken_sec": 100.77,
+    "fps": 3.0,
+    "memory_used_mb": 1416.2,
+    "computing_power_gflops": 1320.0,
+    "electricity_used_joules": 4534.5,
+    "electricity_used_mwh": 1259.58,
+    "embedding_accuracy": 1.0
+  },
+  "adve_model": {
+    "time_taken_sec": 95.47,
+    "fps": 3.1,
+    "memory_used_mb": 1668.5,
+    "computing_power_gflops": 529.4,
+    "electricity_used_joules": 4296.36,
+    "electricity_used_mwh": 1193.43,
+    "mean_embedding_accuracy": 0.9758,
+    "min_embedding_accuracy": 0.8754,
+    "encoder_savings_pct": 60.7
+  },
+  "comparison_savings": {
+    "time_reduction_pct": 5.3,
+    "computing_power_saved_pct": 59.9,
+    "electricity_saved_pct": 5.3,
+    "precision_retention_pct": 97.58
+  }
+}

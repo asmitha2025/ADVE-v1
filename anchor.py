@@ -99,5 +99,9 @@ class AnchorProcessor:
             tensor = self.clip_preprocess(pil_img).unsqueeze(0).to(self.device)
             emb    = self.clip_model.encode_image(tensor)
             emb    = emb / emb.norm(dim=-1, keepdim=True)
+            res    = emb.cpu().numpy().flatten().astype(np.float32)
+            del tensor, emb
+            if self.device == "cuda":
+                torch.cuda.empty_cache()
 
-        return emb.cpu().numpy().flatten().astype(np.float32)
+        return res

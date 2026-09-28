@@ -111,7 +111,7 @@ def generate_enterprise_dataset(video_dirs, output_path, target_samples=50000, m
     print(f"Saved {total_samples} compensated triples -> {output_path}")
 
 
-def train_reconstructor_v3(data_path, output_checkpoint, epochs=20, batch_size=512, lr=3e-4, device="cuda"):
+def train_reconstructor_v3(data_path, output_checkpoint, epochs=20, batch_size=512, lr=3e-4, device="cuda", pretrained=None):
     print("=== Training DeltaReconstructorV3 (Clamped GRU + Residual) ===")
     dataset = TripleDataset(data_path)
     train_size = int(0.9 * len(dataset))
@@ -122,6 +122,14 @@ def train_reconstructor_v3(data_path, output_checkpoint, epochs=20, batch_size=5
     val_loader   = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
     model = DeltaReconstructorV3().to(device)
+
+    # Fine-tune from pretrained weights if provided
+    if pretrained and os.path.exists(pretrained):
+        ckpt = torch.load(pretrained, map_location=device, weights_only=False)
+        state_dict = ckpt.get("model_state_dict", ckpt)
+        model.load_state_dict(state_dict)
+        print(f"  [Fine-tune] Loaded pretrained weights from {pretrained}")
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     cos_loss_fn = nn.CosineEmbeddingLoss()
@@ -194,10 +202,11 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--lr", type=float, default=3e-4)
+    parser.add_argument("--pretrained", default=None, help="Path to pretrained v3 checkpoint for fine-tuning")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
 
     if args.mode == "generate":
         generate_enterprise_dataset(args.video_dir, args.data, target_samples=args.target_samples, device=args.device)
     elif args.mode == "train":
-        train_reconstructor_v3(args.data, args.output, epochs=args.epochs, batch_size=args.batch_size, lr=args.lr, device=args.device)
+        train_reconstructor_v3(args.data, args.output, epochs=args.epochs, batch_size=args.batch_size, lr=args.lr, device=args.device, pretrained=args.pretrained)

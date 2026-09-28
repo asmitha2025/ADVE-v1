@@ -57,31 +57,44 @@ class ADVEPipeline:
         )
 
     def _appearance_delta(self, f1: np.ndarray, f2: np.ndarray) -> float:
-        """Fast histogram-based appearance change score."""
+        """Fast combined histogram + MAE appearance change score for slide/scene cuts."""
         def hist(f):
             h = cv2.calcHist([f], [0, 1, 2], None, [8, 8, 8],
                              [0, 256, 0, 256, 0, 256])
             return cv2.normalize(h, h).flatten()
 
         corr = cv2.compareHist(hist(f1), hist(f2), cv2.HISTCMP_CORREL)
-        return float(1.0 - corr)   # 0 = identical, 1 = completely different
+        hist_diff = float(1.0 - corr)
+
+        g1 = cv2.resize(cv2.cvtColor(f1, cv2.COLOR_BGR2GRAY), (160, 120))
+        g2 = cv2.resize(cv2.cvtColor(f2, cv2.COLOR_BGR2GRAY), (160, 120))
+        mae_diff = float(np.mean(np.abs(g1.astype(float) - g2.astype(float))) / 255.0)
+
+        return max(hist_diff, mae_diff * 2.0)
 
     def _estimate_homography(self, img1: np.ndarray, img2: np.ndarray) -> Optional[np.ndarray]:
         try:
-            gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
-            gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
-            orb = cv2.ORB_create(maxFeatures=500)
-            kp1, des1 = orb.detectAndCompute(gray1, None)
-            kp2, des2 = orb.detectAndCompute(gray2, None)
+            h, w = img1.shape[:2]
+            scale_w, scale_h = 320.0 / w, 240.0 / h
+            g1 = cv2.resize(cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY), (320, 240))
+            g2 = cv2.resize(cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY), (320, 240))
+            orb = cv2.ORB_create(maxFeatures=300)
+            kp1, des1 = orb.detectAndCompute(g1, None)
+            kp2, des2 = orb.detectAndCompute(g2, None)
             if des1 is None or des2 is None or len(kp1) < 10 or len(kp2) < 10:
                 return None
             bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
             matches = bf.match(des1, des2)
-            if len(matches) < 8:
+            if len(matches) < 12:
                 return None
             src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
             dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
-            H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+            if np.std(src_pts[:, 0, 0]) < 15.0 or np.std(src_pts[:, 0, 1]) < 15.0:
+                return None
+            # Scale coordinates back to original frame dimensions
+            src_pts[:, 0, 0] /= scale_w; src_pts[:, 0, 1] /= scale_h
+            dst_pts[:, 0, 0] /= scale_w; dst_pts[:, 0, 1] /= scale_h
+            H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0, maxIters=100)
             return H
         except Exception:
             return None
@@ -107,7 +120,7 @@ class ADVEPipeline:
             refresh = True
             self.force_refresh = False
         else:
-            homography = self._estimate_homography(self.anchor_frame, frame)
+            homography = None if (appearance_delta > self.config.APPEARANCE_THRESHOLD or self.frames_since_anchor > 10) else self._estimate_homography(self.anchor_frame, frame)
             current_graph, delta = self.delta_tracker.track(
                 frame, self.anchor_graph, homography=homography
             )

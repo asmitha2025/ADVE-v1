@@ -1,3 +1,4 @@
+import gc
 import os
 import sys
 import time
@@ -8,7 +9,7 @@ import argparse
 import numpy as np
 
 from adve.core.config import Config
-from adve.core.pipeline import ADVEPipeline
+from adve.core.pipeline_enterprise import ADVEEnterprisePipeline
 from adve.core.clip_loader import load_clip_model
 
 
@@ -43,8 +44,14 @@ def run_enterprise_audit(
     if reconstructor_path and os.path.exists(reconstructor_path):
         config.MLP_MODEL_PATH = reconstructor_path
 
-    clip_model, clip_prep = load_clip_model("ViT-B/32", device=device)
-    pipeline = ADVEPipeline(config, clip_model=clip_model, clip_preprocess=clip_prep)
+    pipeline = ADVEEnterprisePipeline(
+        config=config,
+        reconstructor_path=reconstructor_path,
+        device=device,
+        use_ego_motion=True,
+        use_ema=True,
+        ema_alpha=0.75
+    )
 
     all_frame_sims = []
     all_savings = []
@@ -60,7 +67,7 @@ def run_enterprise_audit(
         if not os.path.exists(v_path):
             continue
 
-        pipeline.reset()
+        pipeline.reset_state()
         t0 = time.time()
         res = pipeline.process_video(v_path, no_validation=False, max_frames=max_frames_per_video)
         elapsed = time.time() - t0
@@ -88,6 +95,8 @@ def run_enterprise_audit(
             "savings": savings,
             "fps": fps
         })
+        pipeline.reset_state()
+        gc.collect()
 
     # Aggregates across all videos & frames
     overall_mean_cos = float(np.mean(all_frame_sims)) if all_frame_sims else 0.0

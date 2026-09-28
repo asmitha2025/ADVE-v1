@@ -1,0 +1,24 @@
+{
+  "test_video": "vidssave.com Simulating and understanding phase change _ Guest video by Vilas Winstein 480P.mp4",
+  "adve_results": {
+    "num_frames": 300,
+    "num_anchors": 11,
+    "num_deltas": 289,
+    "gpu_savings_percent": 96.33,
+    "mean_cossim_precision": 0.9842,
+    "reconstruction_latency_ms": 1.62,
+    "cctv_stream_density_per_gpu": 12
+  },
+  "current_tech_brute_force": {
+    "vision_encoder_calls": 300,
+    "gpu_savings_percent": 0.0,
+    "precision": 1.0,
+    "latency_ms_per_frame": 16.5,
+    "cctv_stream_density_per_gpu": 4
+  },
+  "naive_1fps_sampling": {
+    "vision_encoder_calls": 10,
+    "frame_coverage_percent": 3.33,
+    "precision": 0.821
+  }
+}

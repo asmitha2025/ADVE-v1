@@ -56,7 +56,14 @@ class APIKeyStore:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            # Ensure default dev key exists
+            # Seed the built-in development key for local use only. In
+            # production without an explicit ADVE_API_KEY we must NOT create a
+            # row for a key that is published in this repository — otherwise
+            # validate_key falls through to the database and accepts it.
+            if _USING_DEV_KEY and _PRODUCTION:
+                conn.execute("DELETE FROM api_keys WHERE key_id = 'dev_default'")
+                conn.commit()
+                return
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM api_keys WHERE api_key = ?", (DEFAULT_API_KEY,))
             if cursor.fetchone()[0] == 0:

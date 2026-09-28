@@ -1,0 +1,9 @@
+{
+  "enterprise_audit_score": 82.7,
+  "mean_cosine_sim": 0.976,
+  "min_cosine_sim": 0.8754,
+  "p5_cosine_sim": 0.9188,
+  "temporal_std": 0.0173,
+  "encoder_savings_pct": 61.0,
+  "status": "ENTERPRISE COMMERCIAL GRADE"
+}

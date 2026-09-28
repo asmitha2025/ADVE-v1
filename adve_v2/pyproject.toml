@@ -49,11 +49,14 @@ bench = [
     "torch>=2.1",
     "openai-clip",
     "faiss-cpu>=1.8",
+    "easyocr",          # bench.grounded_eval (OCR-mined ground truth)
+    "groq",             # bench.cost_parity --backend groq (optional live VLM)
 ]
 dev = ["pytest>=7"]
 
 [project.scripts]
 frameroute = "frameroute.cli:main"
+frameroute-mcp = "frameroute.mcp_server:main"
 
 [project.urls]
 Homepage = "https://github.com/asmitha2025/ADVE"

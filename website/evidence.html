@@ -5,15 +5,15 @@
 <meta property="og:title" content="frameroute — the results, including what failed">
 <meta property="og:description" content="3–4× fewer vision-model calls at equal retrieval, scored against independent ground truth — plus the claims we withdrew when better measurement contradicted them.">
 <meta name="twitter:card" content="summary">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%230b0d10'/><rect x='18' y='30' width='26' height='40' rx='4' fill='%23f0a03c'/><rect x='56' y='30' width='26' height='40' rx='4' fill='%23323b46'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%230c0a20'/><rect x='18' y='30' width='26' height='40' rx='4' fill='%23a78bfa'/><rect x='56' y='30' width='26' height='40' rx='4' fill='%23323b46'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
   --bg:#eef0f3; --sheet:#f8f9fb; --panel:#ffffff; --ink:#12161b; --ink-2:#464f5a;
   --muted:#79838f; --line:#dde1e7; --line-2:#c8cfd8;
-  --pencil:#c2410c;          /* grease-pencil mark: the frames we keep */
+  --pencil:#6a4fd3;          /* lavender mark: the frames we keep */
   --save:#0f766e;            /* savings */
   --warn:#b45309; --bad:#b91c1c;
   --shadow:0 1px 2px rgba(18,22,27,.06),0 8px 28px rgba(18,22,27,.07);
@@ -21,13 +21,13 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#101316; --sheet:#171b20; --panel:#1c2126; --ink:#e9edf2; --ink-2:#adb7c2;
   --muted:#7d8792; --line:#2a3037; --line-2:#39424b;
-  --pencil:#f97316; --save:#2dd4bf; --warn:#fbbf24; --bad:#f87171;
+  --pencil:#a78bfa; --save:#2dd4bf; --warn:#fbbf24; --bad:#f87171;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 34px rgba(0,0,0,.34);
 }}
 :root[data-theme="dark"]{
   --bg:#101316; --sheet:#171b20; --panel:#1c2126; --ink:#e9edf2; --ink-2:#adb7c2;
   --muted:#7d8792; --line:#2a3037; --line-2:#39424b;
-  --pencil:#f97316; --save:#2dd4bf; --warn:#fbbf24; --bad:#f87171;
+  --pencil:#a78bfa; --save:#2dd4bf; --warn:#fbbf24; --bad:#f87171;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 34px rgba(0,0,0,.34);
 }
 *{box-sizing:border-box}
@@ -35,7 +35,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,
   font-size:15.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
 .wrap{max-width:980px;margin:0 auto;padding-inline:20px}
 .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
-h1,h2,h3{font-family:Archivo,system-ui,sans-serif;font-weight:800;letter-spacing:-.025em;
+h1,h2,h3{font-family:"Space Grotesk",system-ui,sans-serif;font-weight:800;letter-spacing:-.025em;
   line-height:1.05;text-wrap:balance;margin:0}
 a{color:var(--pencil)}
 .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.18em;
@@ -82,7 +82,7 @@ h3{font-size:17px;font-weight:600;letter-spacing:-.01em}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:26px}
 @media (max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:16px}
-.stat b{display:block;font-family:Archivo,sans-serif;font-size:29px;font-weight:800;
+.stat b{display:block;font-family:"Space Grotesk",sans-serif;font-size:29px;font-weight:800;
   letter-spacing:-.02em;line-height:1}
 .stat b.save{color:var(--save)} .stat b.bad{color:var(--bad)}
 .stat span{display:block;font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.4}
@@ -127,7 +127,7 @@ pre .c{color:var(--muted)}
   text-transform:uppercase;color:var(--pencil);font-weight:600}
 .rung h3{margin-top:8px}
 .rung p{font-size:13.5px;color:var(--ink-2);margin:8px 0 0}
-.rung .price{font-family:Archivo,sans-serif;font-weight:800;font-size:19px;margin-top:12px;display:block}
+.rung .price{font-family:"Space Grotesk",sans-serif;font-weight:800;font-size:19px;margin-top:12px;display:block}
 
 footer{padding-block:34px 70px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
 @media (prefers-reduced-motion:no-preference){
@@ -267,7 +267,7 @@ for pick in sel.picks:
 <footer>
   <strong>frameroute</strong> — sample in change, not in time. MIT licensed.<br>
   Every number on this page comes from a run you can reproduce with the commands above, on footage you supply. Where a claim did not survive measurement, we say so rather than quietly dropping it.<br><br>
-  <a href="index.html">← Back to frameroute</a> · <a href="mailto:baranitharan2020@gmail.com?subject=Frame%20Budget%20Audit%20request">Request a free Frame Budget Audit</a>
+  <a href="index.html">← Back to frameroute</a> · <a href="mailto:hariharanm1802@gmail.com?subject=Frame%20Budget%20Audit%20request">Request a free Frame Budget Audit</a>
 </footer>
 </div>
 

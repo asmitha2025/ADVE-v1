@@ -1,198 +1,345 @@
----
-title: Adve Video Search
-emoji: 📚
-colorFrom: blue
-colorTo: yellow
-sdk: docker
-pinned: false
----
+# ADVE / frameroute
 
-# ADVE — Anchor-Delta Video Embedding
+**Budget-constrained frame selection and multimodal search for video AI pipelines.**
 
-> **96.67% fewer CLIP encoder calls. 0.9484 cosine similarity. Real-time video understanding without re-encoding every frame.**
-
-[![Python](https://img.shields.io/badge/Python-3.9+-blue)](https://python.org)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.1+-red)](https://pytorch.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+> This README was rewritten in September 2026 after an audit found that the
+> project's headline claim did not survive its own benchmark. The previous
+> version is preserved verbatim at [`README_v1_ARCHIVE.md`](README_v1_ARCHIVE.md).
+> Nothing below is asserted without a file you can open or a command you can run.
 
 ---
 
-## The Problem
+## What happened
 
-Every video AI system today does this:
+The original claim was *"96.67% fewer CLIP encoder calls"*, achieved by
+embedding only anchor frames and reconstructing the rest from spatial-graph
+deltas of YOLO object tracks.
+
+The call reduction was real. The **cost** reduction was not.
+
+From [`adve_v2/results/traffic_benchmark_report.json`](adve_v2/results/traffic_benchmark_report.json),
+same video, same machine, same 300 frames:
+
+| | full CLIP | ADVE | delta |
+|---|---:|---:|---:|
+| time | 100.77 s | 95.47 s | **−5.3%** |
+| throughput | 3.0 fps | 3.1 fps | +0.1 fps |
+| memory | 1416 MB | 1668 MB | **+17.8%** |
+| *calculated* GFLOPs | 1320 | 529 | −59.9% |
+
+The 59.9% is arithmetic (frames × 4.4 GFLOPs). The 5.3% is a stopwatch.
+
+The reason is in [`adve_v2/docs/GPU_PERFORMANCE_CERTIFICATE.md`](adve_v2/docs/GPU_PERFORMANCE_CERTIFICATE.md):
 
 ```
-Frame 1  →  CLIP encoder  →  embedding   ← expensive
-Frame 2  →  CLIP encoder  →  embedding   ← expensive
-Frame 3  →  CLIP encoder  →  embedding   ← expensive
-... 30 times per second, forever
+YOLOv8 detection & tracking      120.330 ms
+DeltaReconstructorV3               1.431 ms
+Spatial motion graph               0.000 ms
+─────────────────────────────────────────
+Total per-frame latency          121.760 ms   →  8.2 fps
 ```
 
-At 30 FPS, a 1-hour video requires **108,000 encoder calls**. This is wasteful because between consecutive frames, semantic content changes by only ~2–5%.
+To skip one CLIP pass, the pipeline ran a detector on the same frame. A
+batched ViT-B/32 pass amortises to single-digit milliseconds. **The shortcut
+cost roughly twenty times the road.** That is a design property, not a
+tuning problem, and no amount of quantisation fixes it.
+
+Three further findings from the same audit:
+
+- **The 0.88 "hard floor" is circular.** In production `SafetyGate` has no
+  ground truth, so it compares the prediction to the *anchor* rather than to
+  the truth. A reconstructor that echoes the anchor scores 1.0 forever.
+- **Retrieval was never measured.** Every accuracy figure in `docs/` is
+  cosine similarity to a true CLIP vector — a metric that cannot fail,
+  because unrelated frames from one fixed camera sit at 0.85–0.95 in CLIP
+  space. Whether *search still works* was never tested.
+- **The patent claims have prior art.** Keyframe feature propagation is
+  Deep Feature Flow (CVPR 2017); temporal-redundancy gating in transformers
+  is Eventful Transformers (ICCV 2023); anchor/delta structure is video
+  codecs. Claims 1–6 are not novel.
+
+None of the "certified", "verified" or "independent" documents in `docs/`
+were produced by a third party. Treat them as drafts, not evidence.
 
 ---
 
-## The Idea
+## What the project is now
 
-**Embed anchor frames only. Approximate all other frames using spatial graph deltas.**
+Two things, cleanly separated.
 
+### 1. `frameroute` — sample in change, not in time
+
+Every video pipeline has to answer *which frames do I send to the expensive
+model?* Today the answer is 1 fps or scene-cut detection. Both are bad:
+uniform sampling spends the same on an empty corridor as on a collision, and
+scene-cut is blind to everything happening inside a shot.
+
+`frameroute` cuts the **cumulative-novelty curve** into equal-area segments
+and spends one call per segment. Static stretches collapse to one call; busy
+stretches get as many as they earn.
+
+The change signal costs **~1.2 ms per frame** on CPU, measured, with no
+detector in the hot path — the correction to the 120 ms mistake above.
+
+```python
+from frameroute import FrameRouter, analyze_video
+
+track = analyze_video("footage.mp4", weights="surveillance")
+sel   = FrameRouter().select(track, budget_per_hour=240)
+
+for pick in sel.picks:
+    embedding = your_expensive_model(frame_at(pick.idx))   # VLM, CLIP, whatever
 ```
-Frame 0  →  [CLIP + YOLO]  →  anchor embedding + SpatialGraph G₀
-Frame 1  →  [YOLO only]   →  ΔG₁ → reconstruct E₁ ≈ f(E₀, ΔG₁)
-Frame 2  →  [YOLO only]   →  ΔG₂ → reconstruct E₂ ≈ f(E₀, ΔG₂)
-...
-Frame k  →  scene change detected → new anchor
-```
 
-The **spatial graph** records pairwise object relationships (distance, angle, size ratio).
-The **delta ΔG** measures how those relationships changed.
-The **reconstructor** blends object embeddings weighted by area and positional stability.
+Two guarantees, both about the signal and neither about semantics:
 
-Core hypothesis: `E(frame_t) ≈ f(E_anchor, ΔG(t))`
+- **hard trigger** — any frame whose novelty exceeds a threshold is selected
+  regardless of budget, so a 0.4-second event is not averaged away
+- **max gap** — no stretch longer than `max_gap_sec` goes uncovered
+
+Whether a covered change was *meaningful* is an empirical question. `bench/`
+answers it; the router does not assert it.
+
+### 2. The multimodal search stack — the part that was always good
+
+`adve_v2/adve/` indexes a video across three orthogonal signals and merges
+them onto one timeline with source attribution:
+
+| signal | module | what it catches |
+|---|---|---|
+| visual | `search/index.py` (CLIP + FAISS) | scenes, objects, composition |
+| on-screen text | `vision/ocr_extractor.py` (EasyOCR + FTS) | slides, signage, scoreboards, UI |
+| speech | `audio/indexer.py` (Whisper) | anything said |
+| fusion | `vision/unified_search.py` | 3 s merge window, 8 s min gap |
+
+On-screen text as a first-class, time-fused search signal is uncommon, and
+it is decisive for lectures, screen recordings and meetings — the content
+where CLIP alone reads worst.
 
 ---
 
-## Validation Results
+## Results (measured)
 
-### 1. Synthetic Validation (`test_video.mp4`, 450 frames)
-Evaluated on a 15-second synthetic video with 4 objects including a mid-video scene entry event (Branch 2).
+Gate 1 (retrieval parity) and Gate 2 (router vs uniform) have now been run —
+the experiments the earlier `docs/` skipped. The trained anchor-delta
+reconstruction did not survive them and has been **removed**: the pipeline is
+now CLIP-only (`adve/core/pipeline.py`, `adve/core/lean_indexer.py`), so every
+stored embedding is a real model call and nothing is synthesised.
 
-| Metric | Target | Result | Status |
-|--------|--------|--------|--------|
-| Encoder Savings | ≥ 70% | **96.67%** | ✅ PASS |
-| Mean Cosine Similarity (Δ frames) | ≥ 0.85 | **0.9484** | ✅ PASS |
-| Min Cosine Similarity | — | **0.8482** | — |
-| Frames Above Threshold | — | **99.77%** | — |
-| CLIP Calls | Minimize | **15** | — |
-| GPU Throughput (with validation) | — | **32.2 FPS** | — |
-| GPU Throughput (no-validation) | — | **53.5 FPS** (RTX 4050) | — |
-| CPU Throughput | — | **5.8 FPS** | — |
+**Retrieval** — two real lectures, scored by `bench/grounded_eval.py` against
+ground truth *neither index produced*: the lecture's own slide text (OCR).
+Queries are mined from recurring slide terms; the relevant frames are the ones
+whose slides contain the term. No VLM judging its own output.
 
-![ADVE Synthetic Results](outputs/adve_results.png)
+| lecture (20 queries, top-5) | calls | hit@5 | precision@5 |
+|---|---:|---:|---:|
+| cities_and_decarb — full | 400 | 0.450 | 0.400 |
+| cities_and_decarb — **frameroute** | 104 | **0.750** | 0.320 |
+| cities_and_decarb — uniform | 104 | 0.600 | 0.240 |
+| deep_learning — full | 400 | 0.450 | 0.450 |
+| deep_learning — **frameroute** | 131 | 0.650 | 0.430 |
+| deep_learning — uniform | 131 | **0.750** | 0.460 |
 
-### 2. Real-World MOT17 Validation (`MOT17-02-SDP-raw.webm`, 600 frames)
-Evaluated on a 20-second real-world multi-object tracking sequence with high pedestrian density, camera motion, and object entries.
+**What holds:** at **67–74% fewer calls**, hit@5 was *higher* than full compute
+on both clips (0.65–0.75 vs 0.45). Skipping frames does not hurt retrieval —
+that is what the ~**80% cost cut** rests on, and it replicated.
 
-| Metric | Target | Result | Status |
-|--------|--------|--------|--------|
-| Encoder Savings | ≥ 50% | **60.33%** | ✅ PASS |
-| Mean Cosine Similarity (Δ frames) | ≥ 0.85 | **0.9923** | ✅ PASS |
-| Min Cosine Similarity | — | **0.9490** | — |
-| Frames Above Threshold | — | **100.0%** | — |
-| CLIP Calls | Minimize | **238** | — |
-| GPU Throughput (with validation) | — | **7.4 FPS** | — |
+**What does not hold:** change-aware routing showed **no consistent advantage
+over plain uniform sampling** — +25% on one lecture, −13% on the other, at
+identical call counts. On this evidence the saving comes from *sending fewer
+frames*, not from our selection algorithm. Do not claim otherwise.
 
-![ADVE MOT17 Results](outputs_mot17/adve_results.png)
+**Content-space novelty was tested too** (`adve_v2/frameroute/semantics.py`,
+`adve_v2/bench/semantic_bench.py`). On-screen text is where a lecture actually
+changes, so the signal measures token-level text change with a persistence
+filter — a change must stick to count; that alone cut spurious events from
+252 to 105 on one lecture while keeping every true slide transition. Fused
+as a floor over pixel novelty, four lectures at matched call counts:
 
-### 3. Baseline Comparison (Table 1 - MOT17)
+| lecture (20 OCR queries, top-5) | calls | full | uniform | router | router+text |
+|---|---:|---:|---:|---:|---:|
+| cities_and_decarbonization | 104 | 0.450 | 0.600 | 0.750 | **0.800** |
+| computer_vision_2_2 | 86 | 0.450 | 0.500 | **0.550** | **0.550** |
+| deep_learning | 131 | 0.450 | 0.650 | **0.650** | **0.650** |
+| numerics | 188 | 0.650 | 0.600 | **0.650** | 0.600 |
 
-We compared ADVE's spatial graph delta approximation against standard keyframe sampling strategies (Keyframe-N) on the MOT17 sequence:
+**Mean over four: pixel router +0.062 vs uniform, text-fused +0.062 vs
+uniform, text-vs-pixel 0.000 — a wash.** The content signal is not an edge;
+it ships as an optional module, and the summary is reproducible with
+`cd adve_v2 && python -m bench.semantic_bench --summary "results/semantic_*.json"`.
 
-| Method | Calls | Mean CosSim | Min CosSim | CPU FPS | GPU FPS | GPU VRAM |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Full Embed (baseline)** | 600 (100.0%) | 1.0000 | 1.0000 | 9.6 | 62.5 | 950.0 MB |
-| **Keyframe-5** | 120 (20.0%) | 0.9932 | 0.9080 | 44.7 | 166.7 | 950.0 MB |
-| **Keyframe-10** | 60 (10.0%) | 0.9876 | 0.9054 | 84.8 | 210.5 | 950.0 MB |
-| **Keyframe-30** | 20 (3.3%) | 0.9762 | 0.9054 | 202.5 | 255.3 | 950.0 MB |
-| **ADVE (ours)** | 238 (39.7%) | **0.9923** | **0.9490** | 1.0 | 7.4 | **330.0 MB** |
+**Withdrawn:** earlier versions of this file quoted "median 100% answer parity"
+and "lectures won 4/5 matched-budget tests". The first came from a lenient
+yes/no VLM check that counted two *different* slides as a match (a stricter
+free-form judge scored the same clips 20–35%); the second came from CLIP
+timestamp-recall, which penalises returning the right slide a few seconds off.
+Both metrics were unreliable and have been replaced by the grounded evaluation
+above.
 
-*ADVE dynamically refreshes keyframes during active pedestrian crossings, leading to a much higher minimum similarity floor (0.9490 vs 0.9054) and a 65% reduction in GPU VRAM.*
+**Latency** — end-to-end indexing on a laptop GPU (RTX 4050):
 
----
+| metric | value |
+|---|---|
+| change signal | **1–2 ms/frame** |
+| throughput | 4.5–12× realtime (**1 hr of video in ~5–13 min**) |
+| vs encoding every frame | **~3× faster** |
 
-## How It Works
-
-### Anchor Frame (keyframe)
-- Run **CLIP** on the full frame → `E_anchor` (512-d embedding)
-- Run **YOLOv8** → detect all objects
-- For each object, run **CLIP on the cropped RoI** → per-object embedding
-- Build **SpatialGraph G** with pairwise relations
-
-### Delta Frame (all others)
-- Run **YOLOv8 tracking only** (no CLIP)
-- Compute **ΔG** = structural change between current and anchor graph
-- **Reconstruct** embedding: weighted blend of anchor object embeddings, modulated by positional stability
-- No CLIP call = near-zero marginal cost per frame
-
-### Anchor Refresh Triggers
-| Trigger | Condition |
-|---------|-----------|
-| Spatial delta | `ΔG.total_magnitude > 0.30` |
-| Appearance delta | `histogram_diff > 0.15` |
-| Frame budget | `frames_since_anchor ≥ 30` |
-| New object (Branch 2) | New track ID detected |
-
----
-
-## Project Structure
-
-```
-adve/
-├── config.py               # Thresholds, model selection, device
-├── spatial_graph.py        # SpatialGraph, ObjectState, Relation, compute_delta()
-├── anchor.py               # AnchorProcessor — CLIP + YOLO on keyframes
-├── tracker.py              # DeltaTracker — ByteTrack only, zero CLIP
-├── reconstructor.py        # EmbeddingReconstructor — core hypothesis f()
-├── validator.py            # Cosine similarity metrics + matplotlib plots
-├── pipeline.py             # ADVEPipeline — full orchestrator
-├── main.py                 # CLI entry point
-├── generate_test_video.py  # Synthetic test video generator
-└── outputs/
-    ├── adve_results.json   # Per-frame results + summary
-    └── adve_results.png    # 3-panel validation chart
-```
+Reproduce: `python -m bench.grounded_eval --video <lecture> --budget 80` and
+`python -m bench.latency --video <lecture>`. Two clips, 20 queries each — a
+real signal, not yet a published benchmark.
 
 ---
 
-## Quickstart
+## Quick start
+
+All commands run from `adve_v2/`, where the packages live.
 
 ```bash
-# 1. Install
-python -m venv adve_env && source adve_env/bin/activate
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-pip install git+https://github.com/openai/CLIP.git
-pip install ultralytics opencv-python matplotlib Pillow
+cd adve_v2
+pip install -e .
 
-# 2. Generate test video
-python generate_test_video.py
+# 1. verify the install with no GPU, no model, no API key
+python -m bench.selftest
 
-# 3. Run
-python main.py --video test_video.mp4
+# 2. see what a policy would cost on your own footage — still no model
+python -m frameroute cost your_video.mp4 --usd-per-call 0.002
 
-# 4. Results
-cat outputs/adve_results.json
+# 3. look at the change signal
+python -m frameroute signals your_video.mp4
+
+# 4. select frames under a budget
+python -m frameroute route your_video.mp4 --budget-per-hour 240
+```
+
+`cost` is the one to run in front of a customer: it counts the calls each
+policy would make and multiplies by a price you supply. No inference, no
+credits, and it sizes the saving on their own video in about a minute.
+
+### The whole audit, one command
+
+```bash
+python -m frameroute audit your_video.mp4 --price-per-call 0.005 \
+    --volume-hours 500 --out results/audit.json --md results/audit.md
+```
+
+Runs retrieval parity, latency and the money calculation, then writes the
+one-page deliverable — with the caveats attached. If retrieval cannot be
+measured (no OCR-readable text), it says the saving is not quality-safe
+instead of quietly quoting a reduction.
+
+### Use it from Claude / Cursor (MCP)
+
+A dependency-free MCP server lets an assistant price, route or audit a video
+in the conversation:
+
+```bash
+python -m frameroute.mcp_server        # or: frameroute-mcp
+```
+
+```json
+{"mcpServers": {"frameroute": {"command": "python",
+  "args": ["-m", "frameroute.mcp_server"]}}}
+```
+
+Tools: `cost_video` (no model, seconds), `route_video`, `signals_video`,
+`audit_video`.
+
+---
+
+## The gates
+
+Run in order. Each can kill the next. **No pricing, packaging or outreach
+until all four clear** — the entire `docs/` folder was written before gate 1.
+
+| | question | command | pass |
+|---|---|---|---|
+| **1** | Does skipping frames preserve *retrieval*? | `python -m frameroute gate1 VIDEO` | temporal recall ≥ 0.95 |
+| **2** | Does change-aware routing beat uniform sampling at the *same* budget? | `python -m frameroute gate2 VIDEO` | beats best baseline by ≥ 0.02 on ≥3 of 5 corpora |
+| **3** | Is it cheaper in *seconds and calls*? | same run | ≥ 5× cost cut at ≤ 5% recall loss |
+| **4** | Will anyone pay? | 10 conversations | 3 LOIs |
+
+### What Gate 1 found
+
+It has now been run (see **Results** above). Zero-parameter fills beat the
+trained reconstructor on retrieval, so the trained GRU / UALW stack was
+**removed** — the pipeline is CLIP-only and nothing is synthesised. The
+honest quality metric is *answer parity* (does a VLM give the same answer
+from the routed frame as from full compute), not CLIP timestamp-recall, which
+understates static-lecture footage because the routed index returns the
+right *slide* at a slightly different *timestamp*.
+
+```bash
+python -m bench.cost_parity --video <lecture>.mp4 --auto-span   # cost + retrieval parity
+python -m bench.answer_grade --video <lecture>.mp4              # free-form VLM answer parity (needs a vision API key)
+python -m bench.latency --video <lecture>.mp4                   # wall-clock / throughput
 ```
 
 ---
 
-## Key Results Interpretation
+## Layout
 
-The 15 CLIP encoder calls out of 450 frames break down as:
-- **Frame 0**: initial anchor (mandatory)
-- **Frames 30, 60, 90...**: budget trigger (every 30 frames)
-- **Frame 225**: Branch 2 — new object "bottle" entered scene, triggered refresh
+```
+adve_v2/
+  frameroute/        the router — no detector, no encoder in the hot path
+    signals.py       cheap change signals (~1.2 ms/frame, measured)
+    semantics.py     content-space novelty from OCR text (optional, measured)
+    router.py        equal-accumulated-novelty allocation + guarantees
+    policies.py      the baselines it has to beat
+    adapters.py      model-agnostic downstream + honest call accounting
+    cli.py           route / signals / cost / audit / gate1 / gate2
+    mcp_server.py    same tools over MCP (stdio), no SDK dependency
 
-Every other frame was processed using only YOLOv8 tracking + pure math reconstruction.
+  bench/             the experiments
+    parity.py        retrieval parity + decode-once frame cache
+    cost_parity.py   reduction-at-parity + $ per hour (CLIP proxy or live VLM)
+    answer_grade.py  free-form VLM answer parity with an LLM judge
+    latency.py       end-to-end wall-clock / throughput
+    routing_bench.py matched-budget comparison, cost curve
+    queries.py       query sets, labelled ground truth, OCR/transcript mining
+    audit.py         one command -> the customer-facing Frame Budget Audit page
+    semantic_bench.py content-space vs pixel routing, OCR-grounded
+    selftest.py      verify the install with no GPU and no model
 
----
-
-## Citation
-
-If you use ADVE in your research:
-
-```bibtex
-@misc{asmitha2026adve,
-  title  = {ADVE: Anchor-Delta Video Embedding for Efficient Semantic Scene Understanding},
-  author = {Asmitha},
-  year   = {2026},
-  url    = {https://github.com/asmitha2025/ADVE}
-}
+  adve/              the multimodal search stack (visual + OCR + speech)
+    core/lean_indexer.py   route -> CLIP-encode -> index (no reconstruction)
+    core/pipeline.py       CLIP-only frame processing
+  docs/              commercial drafts written before the gates. Not evidence.
+  results/           benchmark JSON. Trust the .json, not the .md summaries.
 ```
 
-*DOI and arXiv links will be added upon Zenodo/preprint publication.*
+---
+
+## Honest limitations
+
+- **Guarantees are about the signal, not about meaning.** The router can
+  promise it never skipped a large measured change. It cannot promise the
+  change mattered. Any product copy saying "zero missed events" without a
+  labelled event list is doing what the v3.1 docs did.
+- **The router has no demonstrated edge over uniform sampling.** Across runs
+  it won one lecture (+15–25%) and tied or lost the other (0 to −13%); over
+  four lectures, content-space novelty tied pixel novelty exactly (mean
+  +0.000). In the newest four-clip benchmark the pixel router averaged +0.062
+  over uniform — a signal, not a moat. *Skipping* frames is what saves the
+  money; our choice of *which* frames is not yet shown to beat the obvious
+  baseline a customer would write in ten lines. Sell the saving, not the
+  algorithm.
+- **Sample size is small and the metrics are genuinely hard.** Two clips, 20
+  queries each. Three quality metrics were tried and two discarded: a lenient
+  yes/no VLM check (it counted two *different* slides as a match) and CLIP
+  timestamp-recall (it penalises returning the right slide a few seconds off).
+  A strict free-form judge (`bench/answer_grade.py`) scored 20–35% but marks a
+  frame 7 seconds from the reference a miss. Trust `bench/grounded_eval.py`,
+  which scores against the slides' own text rather than a model judging itself.
+- **The architecture is not novel.** Change-aware sampling is prior art
+  (Deep Feature Flow, CoViAR, AdaFocus, Skip-Convolutions, Eventful
+  Transformers, SCSampler). The value is execution, honesty, and integration —
+  not invention. Don't claim otherwise.
+- **Cost figures depend entirely on the downstream model.** The savings are
+  small against CLIP (it is cheap) and large against a VLM (it is not). Say
+  which one you mean, every time.
 
 ---
 
-## License
+## Licence
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT. See `LICENSE`.

@@ -16,9 +16,13 @@ def test_modules_import():
     import bench.cost_parity as cp
     import bench.latency as lat
     import bench.answer_grade as ag
+    import bench.semantic_bench as sb
+    import bench.audit as au
     assert hasattr(cp, "run") and hasattr(cp, "ClipParityBackend")
     assert hasattr(lat, "run") and hasattr(lat, "LatencyReport")
     assert hasattr(ag, "grade_clip") and hasattr(ag, "Gemini")
+    assert hasattr(sb, "run") and hasattr(sb, "SemanticReport")
+    assert hasattr(au, "run_audit") and hasattr(au, "AuditReport")
 
 
 def test_latency_report_table_renders():
@@ -57,6 +61,25 @@ def test_answer_grade_query_set():
     from bench.answer_grade import TASK_QUERIES
     assert len(TASK_QUERIES) == 30
     assert all(isinstance(q, str) and q for q in TASK_QUERIES)
+
+
+def test_semantic_summary_renders(tmp_path):
+    import json
+    from bench.semantic_bench import summarize
+
+    d = {
+        "video": "clip.mp4",
+        "full": {"hit_at_k": 0.450},
+        "uniform": {"hit_at_k": 0.500},
+        "router": {"hit_at_k": 0.600, "model_calls": 100},
+        "router_text": {"hit_at_k": 0.550},
+        "router_vs_uniform": 0.1, "text_vs_uniform": 0.05, "text_vs_router": -0.05,
+    }
+    p = tmp_path / "r.json"
+    p.write_text(json.dumps(d), encoding="utf-8")
+    table = summarize([str(p)])
+    assert "| clip.mp4 | 100 | 0.450 | 0.500 | 0.600 | 0.550 |" in table
+    assert "Mean over 1 lectures" in table
 
 
 if __name__ == "__main__":

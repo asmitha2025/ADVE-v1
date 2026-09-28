@@ -4,7 +4,7 @@
 
 > This README was rewritten in September 2026 after an audit found that the
 > project's headline claim did not survive its own benchmark. The previous
-> version is preserved verbatim at [`README_v1_ARCHIVE.md`](README_v1_ARCHIVE.md).
+> version is preserved verbatim at [`README_v1_ARCHIVE.md`](../README_v1_ARCHIVE.md).
 > Nothing below is asserted without a file you can open or a command you can run.
 
 ---
@@ -17,7 +17,7 @@ deltas of YOLO object tracks.
 
 The call reduction was real. The **cost** reduction was not.
 
-From [`adve_v2/results/traffic_benchmark_report.json`](adve_v2/results/traffic_benchmark_report.json),
+From [`results/traffic_benchmark_report.json`](results/traffic_benchmark_report.json),
 same video, same machine, same 300 frames:
 
 | | full CLIP | ADVE | delta |
@@ -29,7 +29,7 @@ same video, same machine, same 300 frames:
 
 The 59.9% is arithmetic (frames × 4.4 GFLOPs). The 5.3% is a stopwatch.
 
-The reason is in [`adve_v2/docs/GPU_PERFORMANCE_CERTIFICATE.md`](adve_v2/docs/GPU_PERFORMANCE_CERTIFICATE.md):
+The reason is in [`docs/GPU_PERFORMANCE_CERTIFICATE.md`](docs/GPU_PERFORMANCE_CERTIFICATE.md):
 
 ```
 YOLOv8 detection & tracking      120.330 ms
@@ -149,6 +149,25 @@ over plain uniform sampling** — +25% on one lecture, −13% on the other, at
 identical call counts. On this evidence the saving comes from *sending fewer
 frames*, not from our selection algorithm. Do not claim otherwise.
 
+**Content-space novelty was tested too** (`frameroute/semantics.py`,
+`bench/semantic_bench.py`). On-screen text is where a lecture actually
+changes, so the signal measures token-level text change with a persistence
+filter — a change must stick to count; that alone cut spurious events from
+252 to 105 on one lecture while keeping every true slide transition. Fused
+as a floor over pixel novelty, four lectures at matched call counts:
+
+| lecture (20 OCR queries, top-5) | calls | full | uniform | router | router+text |
+|---|---:|---:|---:|---:|---:|
+| cities_and_decarbonization | 104 | 0.450 | 0.600 | 0.750 | **0.800** |
+| computer_vision_2_2 | 86 | 0.450 | 0.500 | **0.550** | **0.550** |
+| deep_learning | 131 | 0.450 | 0.650 | **0.650** | **0.650** |
+| numerics | 188 | 0.650 | 0.600 | **0.650** | 0.600 |
+
+**Mean over four: pixel router +0.062 vs uniform, text-fused +0.062 vs
+uniform, text-vs-pixel 0.000 — a wash.** The content signal is not an edge;
+it ships as an optional module, and the summary is reproducible with
+`python -m bench.semantic_bench --summary "results/semantic_*.json"`.
+
 **Withdrawn:** earlier versions of this file quoted "median 100% answer parity"
 and "lectures won 4/5 matched-budget tests". The first came from a lenient
 yes/no VLM check that counted two *different* slides as a match (a stricter
@@ -196,6 +215,35 @@ python -m frameroute route your_video.mp4 --budget-per-hour 240
 policy would make and multiplies by a price you supply. No inference, no
 credits, and it sizes the saving on their own video in about a minute.
 
+### The whole audit, one command
+
+```bash
+python -m frameroute audit your_video.mp4 --price-per-call 0.005 \
+    --volume-hours 500 --out results/audit.json --md results/audit.md
+```
+
+Runs retrieval parity, latency and the money calculation, then writes the
+one-page deliverable — with the caveats attached. If retrieval cannot be
+measured (no OCR-readable text), it says the saving is not quality-safe
+instead of quietly quoting a reduction.
+
+### Use it from Claude / Cursor (MCP)
+
+A dependency-free MCP server lets an assistant price, route or audit a video
+in the conversation:
+
+```bash
+python -m frameroute.mcp_server        # or: frameroute-mcp
+```
+
+```json
+{"mcpServers": {"frameroute": {"command": "python",
+  "args": ["-m", "frameroute.mcp_server"]}}}
+```
+
+Tools: `cost_video` (no model, seconds), `route_video`, `signals_video`,
+`audit_video`.
+
 ---
 
 ## The gates
@@ -234,10 +282,12 @@ python -m bench.latency --video <lecture>.mp4                   # wall-clock / t
 adve_v2/
   frameroute/        the router — no detector, no encoder in the hot path
     signals.py       cheap change signals (~1.2 ms/frame, measured)
+    semantics.py     content-space novelty from OCR text (optional, measured)
     router.py        equal-accumulated-novelty allocation + guarantees
     policies.py      the baselines it has to beat
     adapters.py      model-agnostic downstream + honest call accounting
-    cli.py           route / signals / cost / gate1 / gate2
+    cli.py           route / signals / cost / audit / gate1 / gate2
+    mcp_server.py    same tools over MCP (stdio), no SDK dependency
 
   bench/             the experiments
     parity.py        retrieval parity + decode-once frame cache
@@ -246,6 +296,8 @@ adve_v2/
     latency.py       end-to-end wall-clock / throughput
     routing_bench.py matched-budget comparison, cost curve
     queries.py       query sets, labelled ground truth, OCR/transcript mining
+    audit.py         one command -> the customer-facing Frame Budget Audit page
+    semantic_bench.py content-space vs pixel routing, OCR-grounded
     selftest.py      verify the install with no GPU and no model
 
   adve/              the multimodal search stack (visual + OCR + speech)
@@ -263,11 +315,14 @@ adve_v2/
   promise it never skipped a large measured change. It cannot promise the
   change mattered. Any product copy saying "zero missed events" without a
   labelled event list is doing what the v3.1 docs did.
-- **The router has no demonstrated edge over uniform sampling.** At matched
-  call counts on grounded evaluation it won one lecture (+25%) and lost the
-  other (−13%). *Skipping* frames is what saves the money; our choice of
-  *which* frames is not yet shown to beat the obvious baseline a customer
-  would write in ten lines. Sell the saving, not the algorithm.
+- **The router has no demonstrated edge over uniform sampling.** Across runs
+  it won one lecture (+15–25%) and tied or lost the other (0 to −13%); over
+  four lectures, content-space novelty tied pixel novelty exactly (mean
+  +0.000). In the newest four-clip benchmark the pixel router averaged +0.062
+  over uniform — a signal, not a moat. *Skipping* frames is what saves the
+  money; our choice of *which* frames is not yet shown to beat the obvious
+  baseline a customer would write in ten lines. Sell the saving, not the
+  algorithm.
 - **Sample size is small and the metrics are genuinely hard.** Two clips, 20
   queries each. Three quality metrics were tried and two discarded: a lenient
   yes/no VLM check (it counted two *different* slides as a match) and CLIP

@@ -28,9 +28,9 @@ only unknown left is whether anyone pays.
       regenerate them; nothing in the repo depends on the old values.
 - [ ] **Deploy the site** *(10 min)* — drag `website/` onto
       <https://app.netlify.com/drop>. `netlify.toml` is picked up automatically.
-- [ ] **Swap the contact address** *(10 min)* — 8 `mailto:` links currently go
-      to a personal Gmail. Use a business address or a Calendly.
-      `grep -n "mailto:" website/*.html`
+- [x] **Swap the contact address** — done: all 8 `mailto:` links now go to
+      `hariharanm1802@gmail.com`. Swap again for a business address/Calendly
+      when you have one (`grep -n "mailto:" website/*.html`).
 - [ ] **Replace the domain placeholders** *(2 min)* — `YOUR-DOMAIN.com` in
       `website/robots.txt` and `website/sitemap.xml`.
 - [ ] **Send five emails** *(1 hr)* — targets, template and follow-up are in
@@ -46,12 +46,13 @@ the answer to "will anyone pay".
 
 - [ ] Ask for **one hour of video**, their **vision model**, and their
       **monthly video-hours** (so you price at their real rate, not a guess).
-- [ ] Run the audit — exact commands in `GO-TO-MARKET.md` §3:
+- [ ] Run the audit — one command, writes the one-pager:
       ```bash
       cd adve_v2
-      python -m bench.grounded_eval --video "CUSTOMER.mp4" --budget 80 --n-queries 20
-      python -m bench.latency      --video "CUSTOMER.mp4" --max-frames 3000
-      python -m bench.cost_parity  --video "CUSTOMER.mp4" --auto-span --price-per-call 0.005 --backend clip
+      python -m bench.audit --video "CUSTOMER.mp4" --budget 80 --max-frames 400 \
+          --price-per-call 0.005 --volume-hours <their monthly hours> \
+          --out results/CUSTOMER_audit.json --md results/CUSTOMER_audit.md
+      # or: frameroute audit "CUSTOMER.mp4" --price-per-call 0.005
       ```
 - [ ] Send back the **one-page deliverable** (template in `GO-TO-MARKET.md` §4).
 - [ ] **Report it honestly.** If uniform sampling ties us on their footage, say

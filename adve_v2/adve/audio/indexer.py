@@ -231,10 +231,10 @@ class AudioIndexer:
         if not rows:
             return []
 
-        import faiss
+        from adve.search.index import empty_index
         ids  = [r[0] - 1 for r in rows]
-        txts = {r[0] - 1: r[2] for r in rows}  # faiss_id → text
-        tss  = {r[0] - 1: r[1] for r in rows}  # faiss_id → timestamp
+        txts = {r[0] - 1: r[2] for r in rows}  # vector_id → text
+        tss  = {r[0] - 1: r[1] for r in rows}  # vector_id → timestamp
 
         # Build sub-index from audio entries
         sub_embs = np.vstack([
@@ -243,7 +243,7 @@ class AudioIndexer:
             if 0 <= i < self.search_index.faiss_index.ntotal
         ]).astype(np.float32)
 
-        sub_index = faiss.IndexFlatIP(self.search_index.dim)
+        sub_index = empty_index(self.search_index.dim)
         sub_index.add(sub_embs)
 
         actual_k       = min(k, sub_index.ntotal)

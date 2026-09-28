@@ -1,0 +1,27 @@
+# ADVE Caddy Reverse Proxy & Automatic Let's Encrypt TLS Configuration
+
+adve.yourdomain.com {
+    # Automatic HTTPS TLS certificate renewal on port 443
+    reverse_proxy localhost:8000
+
+    # Header security hardening
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+    }
+
+    # Request body size limit (500MB)
+    request_body {
+        max_size 500MB
+    }
+
+    # Logging
+    log {
+        output file /var/log/caddy/adve_access.log {
+            roll_size 100mb
+            roll_keep 5
+        }
+    }
+}

@@ -12,8 +12,8 @@ The pipeline is model-agnostic. Quality is scored by a pluggable Backend:
                       the routed index return the same top moments as a
                       full-compute index (temporal recall@10)? This is a proxy
                       for "the VLM still sees the frame it needs to answer".
-  GroqVisionBackend   real VLM (Groq Llama-3.2-Vision). Activates when
-  OpenAIVisionBackend GROQ_API_KEY / OPENAI_API_KEY is set. Quality = answer
+  GroqVisionBackend   real VLM (Groq llama-4 scout/maverick). Activates when
+  GeminiVisionBackend GROQ_API_KEY / GEMINI_API_KEY is set. Quality = answer
                       agreement with the full-frame baseline on a QA task.
 
 Swapping the backend is the only change needed to turn the proxy number into a
@@ -376,13 +376,19 @@ def run(video: str, domain: str, price_per_call: float, parity: float,
         beats = r_calls <= u_calls
     uniform_at = u_calls if u_met else None
 
+    is_proxy = isinstance(backend, ClipParityBackend)
     note = ("Quality is retrieval parity (CLIP proxy); swap in a VLM backend for "
             "answer-level parity on real footage. Savings are calls avoided x your "
-            "VLM price — wall-clock/latency measured separately.")
+            "VLM price — wall-clock/latency measured separately." if is_proxy else
+            "Quality is live VLM answer parity: same yes/no answer from the routed "
+            "top frame and the full-compute top frame. Savings are calls avoided x "
+            "your VLM price — wall-clock/latency measured separately.")
     return CostResult(
         video=video, domain=domain, duration_sec=track.duration_sec,
         frames_analyzed=track.n_analyzed, price_per_call_usd=price_per_call,
-        parity_threshold=parity, quality_metric="temporal recall@10",
+        parity_threshold=parity,
+        quality_metric=("temporal recall@10 (CLIP proxy)" if is_proxy
+                        else f"answer parity ({backend.name})"),
         full_calls=full, routed_calls=r_calls, routed_quality=round(r_q, 4),
         parity_met=r_met,
         uniform_calls_at_parity=uniform_at,

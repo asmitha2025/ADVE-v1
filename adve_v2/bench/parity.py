@@ -40,12 +40,12 @@ carry_forward   reuse the last selected embedding. What a routed pipeline
                 actually yields with no model at all. THE BASELINE TO BEAT.
 slerp           spherical interpolation between the two neighbouring
                 selected embeddings. Zero parameters, zero training.
-adve            plug in the trained DeltaReconstructorV3 / UALW.
+custom_fill     plug in your own reconstructor via run_gate1(arms={...}).
 
-The comparison that matters is adve vs slerp. The repo has never run it. If
-a trained GRU cannot beat spherical interpolation between its own anchors,
-the training pipeline is not earning its complexity -- and slerp should ship
-instead, because it has no checkpoint, no drift and no failure mode.
+This experiment was run with the trained anchor-delta reconstructor. It did
+not beat the two parameter-free fills, so the trained stack was removed and
+the pipeline became CLIP-only. `fill` values are now limited to the honest
+baselines; `custom_fill` exists only for someone who wants to try again.
 """
 
 from __future__ import annotations
@@ -387,7 +387,7 @@ def score_labelled(
 # the gate
 # --------------------------------------------------------------------------
 
-GATE1_THRESHOLD = 0.95   # mean temporal recall parity required to pass
+GATE1_THRESHOLD = 0.95   # best-arm temporal recall parity required to pass
 
 
 @dataclass
@@ -434,7 +434,8 @@ class ParityReport:
         L += [
             "",
             f"**Gate 1 verdict: {self.verdict}** "
-            f"(pass requires temporal recall >= {self.threshold})",
+            f"(pass requires the best arm's temporal recall >= {self.threshold}; "
+            "per-arm PASS/FAIL is marked above)",
             "",
             "Savings are a count of model calls that did not happen. They are "
             "not a wall-clock claim; measure that separately with "
@@ -464,8 +465,8 @@ def run_gate1(
       router+slerp           zero-parameter interpolation
       uniform_1fps+carry     what the industry does today
 
-    Add an "adve" arm with custom_fill=<your reconstructor> to find out
-    whether four generations of training beat spherical interpolation.
+    Pass your own arm in `arms` ({"picks": [...], "fill": ..., "custom_fill": fn})
+    to compare a new fill strategy against these baselines.
     """
     from frameroute.policies import RouterPolicy, UniformFPS
 
@@ -532,7 +533,7 @@ def run_gate1(
 # cli
 # --------------------------------------------------------------------------
 
-def main() -> None:
+def main() -> int:
     import argparse
     from frameroute.adapters import ClipEmbedder
     from bench.queries import QuerySet, queries_for, DEFAULT_QUERIES
@@ -587,7 +588,8 @@ def main() -> None:
     print()
     print(f"[gate1] wrote {args.out} and {args.md}")
     print("[gate1] publish this result whatever it says.")
+    return 0 if report.verdict == "PASS" else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

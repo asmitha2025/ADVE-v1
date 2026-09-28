@@ -9,6 +9,10 @@ Run them in order. Each one can kill the next.
   Gate 3  bench/routing_bench.py  Is the pipeline actually cheaper, measured
                                   in seconds and calls rather than FLOPs?
 
+Once the gates have run, bench/audit.py is the product-shaped wrapper: one
+command that runs retrieval + latency + money and writes the customer-facing
+one-pager, with the caveats attached.
+
 Gate 1 first, always. Every accuracy claim in this repo's docs/ folder is
 cosine similarity to a ground-truth CLIP vector, which is a metric that
 cannot fail: unrelated frames from one fixed camera sit at 0.85-0.95 in CLIP

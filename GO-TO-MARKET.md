@@ -100,19 +100,34 @@ attention and one GPU hour.
 ```bash
 cd adve_v2
 
-# 1. Retrieval vs independent ground truth (the headline number).
-#    Mines queries from the video's own slide text - no API key needed.
-python -m bench.grounded_eval --video "CUSTOMER.mp4" --budget 80 \
-    --max-frames 400 --k 5 --n-queries 20 --out results/CUSTOMER_grounded.json
+# The whole audit, one command. It runs all three measurements below and
+# writes the one-page deliverable from §4, caveats attached.
+python -m bench.audit --video "CUSTOMER.mp4" --budget 80 --max-frames 400 \
+    --price-per-call 0.005 --volume-hours 500 \
+    --out results/CUSTOMER_audit.json --md results/CUSTOMER_audit.md
+
+# Equivalent via the product CLI:
+#   frameroute audit "CUSTOMER.mp4" --price-per-call 0.005 --volume-hours 500
+```
+
+The three stages it wraps, if you need to run one on its own:
+
+```bash
+# 1. Retrieval vs independent ground truth (OCR-mined queries, no API key).
+python -m bench.grounded_eval --video "CUSTOMER.mp4" --budget 80 --max-frames 400
 
 # 2. Throughput / latency - ops teams block on this.
-python -m bench.latency --video "CUSTOMER.mp4" --max-frames 3000 \
-    --out results/CUSTOMER_latency.json
+python -m bench.latency --video "CUSTOMER.mp4" --max-frames 3000
 
 # 3. Price it at THEIR model's rate (ask them; don't guess).
 python -m bench.cost_parity --video "CUSTOMER.mp4" --auto-span \
-    --price-per-call 0.005 --backend clip --out results/CUSTOMER_cost.json
+    --price-per-call 0.005 --backend clip
 ```
+
+If the footage has no OCR-readable text (no slides, no screen content), the
+audit tells you retrieval could not be measured and prints the saving as
+`--skip-retrieval` does: counted calls only, **not quality-safe**. Say that in
+the email rather than quoting a quality claim.
 
 **Read the output honestly before sending:**
 - If `hit@5` for frameroute is at or above full compute → the saving is real, say so.

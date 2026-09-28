@@ -126,7 +126,7 @@ else:
         print(f"[API Startup] Warning: Whisper warmup failed: {e}")
 
     try:
-        print("[API Startup] Warming up ADVE Pipeline (YOLO & Reconstructor)...")
+        print("[API Startup] Warming up ADVE Pipeline (YOLO + CLIP)...")
         import numpy as np
         config = Config()
         global_pipeline = ADVEPipeline(

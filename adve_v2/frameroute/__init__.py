@@ -43,6 +43,9 @@ from .adapters import (
     ClipEmbedder, CountingEmbedder, CallLedger, ExactIndex,
     PricedCaptioner, DryRunCaptioner,
 )
+from .cascade import (
+    TierSelection, CascadeSelection, CascadeRouter, route_cascade
+)
 
 __version__ = "0.1.0"
 
@@ -53,4 +56,5 @@ __all__ = [
     "default_policy_suite", "policy_by_name",
     "ClipEmbedder", "CountingEmbedder", "CallLedger", "ExactIndex",
     "PricedCaptioner", "DryRunCaptioner",
+    "TierSelection", "CascadeSelection", "CascadeRouter", "route_cascade",
 ]
