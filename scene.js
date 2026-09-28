@@ -34,7 +34,7 @@ function boot() {
   renderer.setSize(innerWidth, innerHeight);
 
   const scene = new THREE.Scene();
-  const BG = new THREE.Color(0x07080a);
+  const BG = new THREE.Color(0x0c0a20);
   scene.fog = new THREE.Fog(BG, 40, 300);
 
   const camera = new THREE.PerspectiveCamera(56, innerWidth / innerHeight, 0.5, 400);
@@ -118,12 +118,12 @@ function boot() {
   edge.frustumCulled = false;
   scene.add(edge);
 
-  const AMBER = new THREE.Color(0xf0a03c);
-  const AMBER_HOT = new THREE.Color(0xffc477);
-  const NEUTRAL = new THREE.Color(0x2e3a49);
-  const SIGNAL = new THREE.Color(0x8fb0d0);
-  const DROPPED = new THREE.Color(0x141a21);
-  const EDGE_OFF = new THREE.Color(0x44546a);
+  const AMBER = new THREE.Color(0xa78bfa);
+  const AMBER_HOT = new THREE.Color(0xd9cfff);
+  const NEUTRAL = new THREE.Color(0x2c2752);
+  const SIGNAL = new THREE.Color(0x9d8ff0);
+  const DROPPED = new THREE.Color(0x141127);
+  const EDGE_OFF = new THREE.Color(0x4d4480);
 
   // Scratch objects, reused every frame — nothing is allocated inside the loop.
   const m4 = new THREE.Matrix4();
@@ -146,7 +146,7 @@ function boot() {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     dust = new THREE.Points(g, new THREE.PointsMaterial({
-      size: 0.075, color: 0x5d6b7d, transparent: true, opacity: 0.55, depthWrite: false,
+      size: 0.075, color: 0x6f6694, transparent: true, opacity: 0.55, depthWrite: false,
     }));
     scene.add(dust);
   }
@@ -273,7 +273,7 @@ function boot() {
       const px = Math.cos(a) * f.r, py = Math.sin(a) * f.r * 0.72;
 
       // Collapse plates the camera is about to pass through. Without this a
-      // kept frame at close range covers the copy in a slab of amber.
+      // kept frame at close range covers the copy in a slab of lavender.
       const nearFade = smoothstep(2, 15, camera.position.z - f.z);
       const litScale = 1 + f.lit * routing * 0.3;
       const s = f.scale * (0.55 + 0.45 * reveal) * litScale * nearFade;
@@ -296,7 +296,7 @@ function boot() {
       m4.compose(v3, q, s3);
       glow.setMatrixAt(i, m4);
 
-      // colour: neutral → signal-lit → routed (amber) or dropped (near black)
+      // colour: neutral → signal-lit → routed (lavender) or dropped (near black)
       cA.copy(NEUTRAL).lerp(SIGNAL, f.novelty * signal * 0.85);
       cB.copy(f.kept ? AMBER : DROPPED);
       cA.lerp(cB, routing * (f.kept ? f.lit : 0.8));
