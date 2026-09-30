@@ -29,7 +29,7 @@ only unknown left is whether anyone pays.
 - [ ] **Deploy the site** *(10 min)* — drag `website/` onto
       <https://app.netlify.com/drop>. `netlify.toml` is picked up automatically.
 - [x] **Swap the contact address** — done: all 8 `mailto:` links now go to
-      `hariharanm1802@gmail.com`. Swap again for a business address/Calendly
+      `asmitha8825@gmail.com`. Swap again for a business address/Calendly
       when you have one (`grep -n "mailto:" website/*.html`).
 - [ ] **Replace the domain placeholders** *(2 min)* — `YOUR-DOMAIN.com` in
       `website/robots.txt` and `website/sitemap.xml`.

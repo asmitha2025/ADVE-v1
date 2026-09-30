@@ -9,7 +9,7 @@ description = "Budget-constrained frame selection for video AI pipelines — sam
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "Asmitha" }]
+authors = [{ name = "Asmitha", email = "asmitha8825@gmail.com" }]
 keywords = [
     "video", "frame selection", "sampling", "VLM", "CLIP",
     "video RAG", "cost optimization", "change detection",
@@ -59,7 +59,7 @@ frameroute = "frameroute.cli:main"
 frameroute-mcp = "frameroute.mcp_server:main"
 
 [project.urls]
-Homepage = "https://github.com/asmitha2025/ADVE"
+Homepage = "https://github.com/asmitha2025/ADVE-v1"
 
 # Ship the router as the installable package. The `adve` search stack and the
 # `bench` harness are discovered too (so `pip install -e .` exposes them for
