@@ -1,3 +1,7 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
 <title>frameroute — results and limitations</title>
 <meta name="description" content="The full measurements behind frameroute: what held up, what failed to replicate, and what we withdrew.">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -135,6 +139,8 @@ footer{padding-block:34px 70px;border-top:1px solid var(--line);color:var(--mute
   @keyframes pop{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
 }
 </style>
+</head>
+<body>
 
 <div class="wrap">
 
@@ -258,7 +264,7 @@ for pick in sel.picks:
   <div class="honest">
     <h3>✗ Not production ready</h3>
     <ul>
-      <li>The bundled HTTP server has <strong>unfixed security defects</strong> — arbitrary file read, upload path traversal, a hardcoded default key, wildcard CORS, an unbounded rate-limiter and SSRF-able stream/URL ingestion. <strong>Do not expose it.</strong> Audits run offline; the hosted API is not launched.</li>
+      <li>The bundled HTTP server has had <strong>7 security defects identified and closed</strong> (arbitrary file read, upload path traversal, hardcoded key, wildcard CORS, rate limiter, sports paths, retired chat model). It has not been load-tested or audited for multi-tenant production deployment. Audits run offline; the hosted API is not launched.</li>
       <li>Evidence is two lectures. Continuous-motion footage (traffic, busy streets, fast sport) is untested for saving and is the case where routing helps least.</li>
     </ul>
   </div>
@@ -267,7 +273,7 @@ for pick in sel.picks:
 <footer>
   <strong>frameroute</strong> — sample in change, not in time. MIT licensed.<br>
   Every number on this page comes from a run you can reproduce with the commands above, on footage you supply. Where a claim did not survive measurement, we say so rather than quietly dropping it.<br><br>
-  <a href="index.html">← Back to frameroute</a> · <a href="mailto:hariharanm1802@gmail.com?subject=Frame%20Budget%20Audit%20request">Request a free Frame Budget Audit</a>
+  <a href="index.html">← Back to frameroute</a> · <a href="mailto:hariharanm1802@gmail.com?subject=Frame%20Budget%20Audit%20request">Request a free Frame Budget Audit</a> · <a href="https://github.com/asmitha2025/ADVE" target="_blank" rel="noopener">GitHub</a> · <a href="https://pypi.org/project/frameroute/" target="_blank" rel="noopener">PyPI</a>
 </footer>
 </div>
 
@@ -285,3 +291,5 @@ for pick in sel.picks:
   }
 })();
 </script>
+</body>
+</html>

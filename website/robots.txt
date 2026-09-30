@@ -1,5 +1,4 @@
 User-agent: *
 Allow: /
 
-# Replace with your real domain once the site is live.
-Sitemap: https://YOUR-DOMAIN.com/sitemap.xml
+Sitemap: https://frameroute.dev/sitemap.xml

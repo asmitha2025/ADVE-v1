@@ -18,6 +18,7 @@ adve_v2/yolov8n.pt
 # Benchmark footage (multi-GB, local only — never commit)
 dataset_lectures/
 Testing videos/
+videoframe/
 
 # Transient Media & Cache
 .gradio/
