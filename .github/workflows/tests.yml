@@ -1,0 +1,71 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  core:
+    # The core router is numpy + opencv only. These tests gate the badge, so
+    # they must not depend on a 2 GB torch download or any model weights
+    # fetched at import time - a badge that goes red on a CDN hiccup is worse
+    # than no badge.
+    name: core (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both ends of the range declared in pyproject.toml (requires-python >=3.9)
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install core package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest
+
+      - name: Zero-dependency self-test
+        run: python -m bench.selftest
+
+      - name: Router, bench, MCP and semantics suites
+        run: >
+          pytest -q
+          tests/test_audit.py
+          tests/test_bench_modules.py
+          tests/test_mcp_server.py
+          tests/test_semantics.py
+
+  search:
+    # The multimodal stack (CLIP/FAISS/Whisper/OCR). Heavier and slower; kept
+    # off the badge path but still run so regressions surface.
+    name: search extras
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install with search extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[search]"
+          pip install pytest
+
+      - name: Multimodal suites
+        run: >
+          pytest -q
+          tests/test_adve_v2.py
+          tests/test_lean_indexer.py
+          tests/test_two_stage_boost.py
