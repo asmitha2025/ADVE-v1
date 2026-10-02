@@ -1,0 +1,43 @@
+{
+  "video": "..\\dataset_lectures\\video\\cities_and_decarbonization_standard_res.mp4",
+  "frames_analyzed": 400,
+  "duration_sec": 2411.8,
+  "budget": 80,
+  "k": 5,
+  "n_queries": 20,
+  "text_weight": 1.0,
+  "text_observations": 400,
+  "text_observations_nonempty": 336,
+  "text_changes_detected": 105,
+  "full": {
+    "name": "reference_full",
+    "model_calls": 400,
+    "hit_at_k": 0.45,
+    "precision_at_k": 0.4,
+    "n_queries": 20
+  },
+  "uniform": {
+    "name": "uniform",
+    "model_calls": 104,
+    "hit_at_k": 0.6,
+    "precision_at_k": 0.24,
+    "n_queries": 20
+  },
+  "router": {
+    "name": "router",
+    "model_calls": 104,
+    "hit_at_k": 0.75,
+    "precision_at_k": 0.32,
+    "n_queries": 20
+  },
+  "router_text": {
+    "name": "router_text",
+    "model_calls": 104,
+    "hit_at_k": 0.8,
+    "precision_at_k": 0.35,
+    "n_queries": 20
+  },
+  "router_vs_uniform": 0.15,
+  "text_vs_uniform": 0.2,
+  "text_vs_router": 0.05
+}

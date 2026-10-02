@@ -1,0 +1,1512 @@
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Response
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional, List
+import tempfile
+import os
+import shutil
+import time
+import uvicorn
+
+app = FastAPI(
+    title="ADVE Video Intelligence API",
+    description="Semantic video indexing and search using Anchor-Delta Video Embedding",
+    version="2.0.0",
+)
+
+# Wildcard CORS lets any site on the internet call this API with a user's
+# browser. Configure real origins via ADVE_CORS_ORIGINS (comma separated);
+# the default is local development only.
+_cors_env = os.environ.get("ADVE_CORS_ORIGINS", "").strip()
+ALLOWED_ORIGINS = ([o.strip() for o in _cors_env.split(",") if o.strip()]
+                   or ["http://localhost:3000", "http://127.0.0.1:3000",
+                       "http://localhost:8000", "http://127.0.0.1:8000"])
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
+
+from adve.api.auth import APIKeyAuthMiddleware, APIKeyStore
+from adve.api.rate_limiter import RateLimiterMiddleware
+DATA_DIR = os.environ.get("ADVE_DATA_DIR", "adve_v2/data")
+key_store = APIKeyStore(os.path.join(DATA_DIR, "auth.db"))
+app.add_middleware(APIKeyAuthMiddleware, key_store=key_store)
+app.add_middleware(RateLimiterMiddleware, requests_per_minute=100)
+
+# Global state
+import functools
+from adve.search.index import ADVESearchIndex
+from adve.core.pipeline import ADVEPipeline
+from adve.core.config   import Config
+from adve.core.stream   import MultiCameraManager
+
+from adve.sports.detector import SportsEventDetector
+from adve.sports.formation import FormationTracker
+from adve.sports.generator import HighlightGenerator
+from adve.sports.heatmap import PlayerHeatmap
+import cv2
+import json
+
+DATA_DIR = os.environ.get("ADVE_DATA_DIR", "adve_v2/data")
+INDEX_DIR = os.path.join(DATA_DIR, "main_index")
+UPLOADS_DIR = os.path.join(DATA_DIR, "uploads")
+
+# ── Path safety ───────────────────────────────────────────────────────────────
+# video_id and upload filenames arrive from the client. Without containment a
+# caller can name ANY file on disk — and /v1/frame with frame_idx=-1 would
+# stream it back verbatim. Every media lookup resolves to a basename inside one
+# of these roots, and only video extensions are served.
+import re
+
+MEDIA_ROOTS = [os.path.abspath(p) for p in [
+    UPLOADS_DIR, "demo_videos", "demo_data/videos",
+    "adve_v2/demo_videos", "adve_v2/demo_data/videos", "Input video", ".",
+]]
+MEDIA_EXTS = {".mp4", ".webm", ".mkv", ".avi", ".mov", ".m4v"}
+
+
+def safe_filename(name: str) -> str:
+    """Strip every directory component so a name cannot escape its folder."""
+    base = os.path.basename((name or "").replace("\\", "/"))
+    base = re.sub(r"[^A-Za-z0-9._-]", "_", base).lstrip(".")
+    return (base or "upload.bin")[:180]
+
+
+def resolve_media(video_id: str) -> Optional[str]:
+    """Resolve a client-supplied id to a real video file INSIDE MEDIA_ROOTS."""
+    base = safe_filename(video_id)
+    if os.path.splitext(base)[1].lower() not in MEDIA_EXTS:
+        return None
+    for root in MEDIA_ROOTS:
+        cand = os.path.abspath(os.path.join(root, base))
+        try:
+            if os.path.commonpath([cand, root]) == root and os.path.isfile(cand):
+                return cand
+        except ValueError:      # different drives on Windows
+            continue
+    return None
+
+
+import threading
+
+search_index = ADVESearchIndex(INDEX_DIR)
+camera_mgr   = MultiCameraManager(index_writer=search_index)
+global_pipeline = None
+active_tasks = {}
+pipeline_lock = threading.Lock()
+
+# Warm up CLIP and Whisper models on the main thread to prevent thread-safety crashes on Windows
+if os.environ.get("SPACE_ID") or os.environ.get("LOW_MEMORY"):
+    print("[API Startup] Running in low-memory/Space mode: Skipping model warmup to conserve memory.")
+    try:
+        import torch
+        torch.set_num_threads(1)
+        print("[API Startup] Set PyTorch to 1 CPU thread to optimize low-memory container usage.")
+    except Exception as e:
+        print(f"[API Startup] Warning: Failed to set PyTorch threads: {e}")
+else:
+    try:
+        print("[API Startup] Warming up CLIP text encoder...")
+        search_index.search_by_text("warmup", k=1)
+        print("[API Startup] CLIP model warmed up successfully.")
+    except Exception as e:
+        print(f"[API Startup] Warning: CLIP warmup failed: {e}")
+
+    try:
+        print("[API Startup] Warming up Whisper model...")
+        from adve.core.audio_transcriber import AudioTranscriber
+        transcriber = AudioTranscriber(model_name="tiny")
+        transcriber._load_model()
+        print("[API Startup] Whisper model warmed up successfully.")
+    except Exception as e:
+        print(f"[API Startup] Warning: Whisper warmup failed: {e}")
+
+    try:
+        print("[API Startup] Warming up ADVE Pipeline (YOLO + CLIP)...")
+        import numpy as np
+        config = Config()
+        global_pipeline = ADVEPipeline(
+            config,
+            clip_model = search_index._clip_model,
+            clip_preprocess = search_index._clip_prep
+        )
+        dummy_frame = np.zeros((320, 320, 3), dtype=np.uint8)
+        global_pipeline.process_frame(dummy_frame, 0, no_validation=True)
+        print("[API Startup] ADVE Pipeline warmed up successfully.")
+    except Exception as e:
+        print(f"[API Startup] Warning: ADVE Pipeline warmup failed: {e}")
+
+global_audio_indexer = None
+try:
+    print("[API Startup] Initializing AudioIndexer...")
+    from adve.audio.indexer import AudioIndexer
+    global_audio_indexer = AudioIndexer(
+        search_index,
+        device = "cpu",
+        clip_model = search_index._clip_model,
+        clip_prep = search_index._clip_prep
+    )
+    if os.environ.get("SPACE_ID") or os.environ.get("LOW_MEMORY"):
+        print("[API Startup] Running in low-memory/Space mode: Skipping AudioIndexer model warmups.")
+    else:
+        global_audio_indexer._get_whisper()
+        global_audio_indexer._get_clip()
+        print("[API Startup] AudioIndexer warmed up successfully.")
+except Exception as e:
+    print(f"[API Startup] Warning: AudioIndexer warmup failed: {e}")
+
+global_tiled_encoder = None
+global_ocr_extractor = None
+global_unified_search = None
+
+try:
+    print("[API Startup] Initializing vision and search extensions...")
+    from adve.vision.tiled_encoder import TiledEncoder
+    from adve.vision.ocr_extractor import OCRExtractor
+    from adve.vision.unified_search import UnifiedSearchEngine
+    
+    config = Config()
+    if global_pipeline is not None:
+        global_tiled_encoder = TiledEncoder(
+            clip_model = global_pipeline.anchor_proc.clip_model,
+            clip_prep  = global_pipeline.anchor_proc.clip_preprocess,
+            device     = config.DEVICE,
+        )
+    
+    ocr_db_path = os.path.join(INDEX_DIR, "ocr.db")
+    os.makedirs(os.path.dirname(ocr_db_path), exist_ok=True)
+    global_ocr_extractor = OCRExtractor(
+        db_path = ocr_db_path,
+        device  = config.DEVICE,
+    )
+    
+    global_unified_search = UnifiedSearchEngine(
+        visual_index = search_index,
+        ocr_extractor = global_ocr_extractor,
+        audio_indexer = global_audio_indexer,
+    )
+    print("[API Startup] Vision and search extensions initialized successfully.")
+except Exception as e:
+    print(f"[API Startup] Warning: Failed to initialize extensions: {e}")
+
+
+def init_users_db():
+    import sqlite3
+    # Use the same DB as metadata
+    db = sqlite3.connect(os.path.join(INDEX_DIR, "metadata.db"))
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            name       TEXT,
+            email      TEXT UNIQUE,
+            api_key    TEXT UNIQUE,
+            created_at REAL
+        )
+    """)
+    db.commit()
+    db.close()
+
+# Initialize DB on load
+init_users_db()
+
+
+# ── Models ────────────────────────────────────────────────────────────────────
+
+class TextSearchRequest(BaseModel):
+    query:          str
+    k:              int = 10
+    camera_id:      Optional[str] = None
+    anchor_only:    Optional[bool] = False
+    min_similarity: Optional[float] = 0.0
+    temporal_dedup: Optional[bool] = True
+
+class StreamRequest(BaseModel):
+    camera_id: str
+    rtsp_url:  str
+
+class SearchResult(BaseModel):
+    video_path: str
+    camera_id:  str
+    timestamp:  float
+    frame_idx:  int
+    similarity: float
+    is_anchor:  Optional[bool] = False
+    source:     Optional[str] = "visual"
+    text:       Optional[str] = ""
+    objects:    Optional[List[str]] = []
+
+class RegisterRequest(BaseModel):
+    name:  str
+    email: str
+
+class YouTubeIndexRequest(BaseModel):
+    url: str
+    tiled_encoding: Optional[bool] = False
+    ocr: Optional[bool] = True
+    whisper: Optional[bool] = True
+    adaptive_fps: Optional[bool] = True
+    speed_preset: Optional[str] = "standard"
+
+class ChatRequest(BaseModel):
+    question:       str
+    camera_id:      Optional[str] = None
+    history:        Optional[List[dict]] = []
+
+
+# ── Background indexing ───────────────────────────────────────────────────────
+
+def ocr_video_async(video_path: str, video_id: str, anchor_timestamps: list):
+    """Runs EasyOCR in a background thread."""
+    if global_ocr_extractor is not None and anchor_timestamps:
+        try:
+            print(f"[API Background] Running OCR on {len(anchor_timestamps)} anchor frames...")
+            global_ocr_extractor.index_video(video_path, video_id, anchor_timestamps)
+            print(f"[API Background] OCR indexing completed for {video_id}.")
+        except Exception as e:
+            print(f"OCR indexing warning: {e}")
+
+def transcribe_video_async(video_path: str, video_id: str):
+    """Runs Whisper transcription and AudioIndexer in a background thread."""
+    from adve.core.audio_transcriber import AudioTranscriber
+    try:
+        transcriber = AudioTranscriber()
+        if transcriber.whisper_available:
+            print(f"[API Background] Extracting and transcribing speech for {video_id}...")
+            speech_segments = transcriber.transcribe(video_path)
+            if speech_segments:
+                search_index.add_transcripts(video_id, speech_segments)
+                print(f"[API Background] Successfully indexed {len(speech_segments)} speech segments.")
+    except Exception as e:
+        print(f"Audio transcription warning: {e}")
+
+    if global_audio_indexer is not None:
+        try:
+            print(f"[API Background] Running AudioIndexer on {video_id}...")
+            global_audio_indexer.index_video(video_path, video_id)
+            print(f"[API Background] AudioIndexer indexing completed for {video_id}.")
+        except Exception as e:
+            print(f"[API Background] AudioIndexer failed: {e}")
+
+def index_video_task(
+    video_path: str,
+    video_id: str,
+    task_id: Optional[str] = None,
+    tiled_encoding: bool = False,
+    ocr: bool = True,
+    whisper: bool = True,
+    adaptive_fps: bool = True,
+    speed_preset: str = "standard"
+):
+    """Runs in background after upload. Decodes frames, runs ADVE, and schedules OCR/Audio indexing."""
+    import cv2
+    import numpy as np
+
+    global global_pipeline
+    pipeline = global_pipeline
+    if pipeline is None:
+        print("[API Startup fallback] Initializing new pipeline instance inside task...")
+        config   = Config()
+        pipeline = ADVEPipeline(
+            config,
+            clip_model = search_index._clip_model,
+            clip_preprocess = search_index._clip_prep
+        )
+        
+    with pipeline_lock:
+        pipeline.reset()
+        
+    # Auto-transcode & normalize video inputs (4K, HEVC, High FPS)
+    try:
+        from adve.core.transcoder import VideoTranscoder
+        transcoder = VideoTranscoder(max_width=1280, max_height=720, target_fps=30)
+        video_path, was_transcoded = transcoder.transcode_if_needed(video_path)
+        if was_transcoded:
+            print(f"[API Task] Uploaded video auto-transcoded to: {video_path}")
+    except Exception as transcode_err:
+        print(f"[API Task] Warning: Transcoder probe skipped ({transcode_err})")
+
+    cap      = cv2.VideoCapture(video_path)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
+    fps      = cap.get(cv2.CAP_PROP_FPS) or 30
+    
+    # Enforce adaptive frame skip (Adaptive FPS Upgrade)
+    config = Config()
+    
+    # Map speed_preset to custom frame processing rates
+    process_fps = getattr(config, "PROCESS_FPS", 2.0)
+    min_process_fps = getattr(config, "MIN_PROCESS_FPS", 0.2)
+    max_process_fps = getattr(config, "MAX_PROCESS_FPS", 4.0)
+    
+    is_cpu_only = (config.DEVICE == "cpu" or os.environ.get("SPACE_ID") or os.environ.get("LOW_MEMORY"))
+    if is_cpu_only:
+        process_fps = 0.15
+        min_process_fps = 0.05
+        max_process_fps = 0.3
+        if speed_preset == "fast":
+            process_fps = 0.05
+            min_process_fps = 0.02
+            max_process_fps = 0.1
+        elif speed_preset == "high":
+            process_fps = 0.3
+            min_process_fps = 0.1
+            max_process_fps = 0.5
+    else:
+        if speed_preset == "fast":
+            process_fps = 0.5
+            min_process_fps = 0.1
+            max_process_fps = 1.0
+        elif speed_preset == "high":
+            process_fps = 4.0
+            min_process_fps = 0.5
+            max_process_fps = 8.0
+
+    from adve.core.frame_filter import FrameFilter
+    motion_filter = FrameFilter(motion_threshold=config.MOTION_THRESHOLD)
+    
+    start_time = time.time()
+    processed_count = 0
+    last_processed_idx = -999
+    
+    batch    = []
+    idx      = 0
+    anchor_timestamps = [] # Track anchor timestamps (Tiled Encoding & OCR)
+    delta_timeline = []
+    position_timeline = []
+    player_counts = []
+
+    print(f"Indexing visual frames: {video_id} (Adaptive={adaptive_fps}, Tiled={tiled_encoding})")
+    if task_id and task_id in active_tasks:
+        active_tasks[task_id]["status"] = "Indexing visual frames..."
+        active_tasks[task_id]["metrics"] = {
+            "total_frames": total_frames,
+            "processed_frames": 0,
+            "skipped_frames": 0,
+            "cpu_usage": 0.0,
+            "ram_usage": 0.0,
+            "vram_allocated_mb": 0.0,
+            "vram_reserved_mb": 0.0,
+            "speed_fps": 0.0,
+            "elapsed_str": "0s",
+            "eta_str": "Calculating..."
+        }
+
+    motion_score = 1.0
+    has_motion = True
+
+    while cap.isOpened():
+        # Check if paused or cancelled by user
+        if task_id and task_id in active_tasks:
+            if active_tasks[task_id].get("cancelled"):
+                print(f"[Task {task_id}] Indexing cancelled by user.")
+                break
+            while active_tasks[task_id].get("paused"):
+                time.sleep(0.5)
+                if active_tasks[task_id].get("cancelled"):
+                    break
+            if active_tasks[task_id].get("cancelled"):
+                print(f"[Task {task_id}] Indexing cancelled by user while paused.")
+                break
+
+        # Determine the skip size for the next frame
+        if last_processed_idx == -999:
+            current_skip = 1
+        else:
+            if not adaptive_fps:
+                current_skip = max(1, int(fps / process_fps))
+            else:
+                if motion_score < 0.003:
+                    current_skip = int(fps / min_process_fps)
+                elif motion_score < 0.01:
+                    current_skip = int(fps / (process_fps * 1.5)) if is_cpu_only else int(fps / 2.0)
+                elif motion_score < 0.03:
+                    current_skip = int(fps / process_fps)
+                else:
+                    current_skip = max(1, int(fps / max_process_fps))
+
+        # Skip frames using cheap cap.grab() which reads but doesn't decode
+        skipped_successfully = True
+        for _ in range(current_skip - 1):
+            if not cap.grab():
+                skipped_successfully = False
+                break
+            idx += 1
+
+        if not skipped_successfully:
+            break
+
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        last_processed_idx = idx
+        processed_count += 1
+
+        with pipeline_lock:
+            result    = pipeline.process_frame(frame, idx)
+        timestamp = idx / fps
+
+        # Calculate motion score on this processed frame to decide the next skip size
+        has_motion, motion_score = motion_filter.has_motion(frame)
+
+        # Extract detected object labels for Two-Stage search metadata
+        obj_classes = [obj["class_name"] for obj in result.get("objects", [])]
+        obj_metadata = ", ".join(set(obj_classes))
+
+        # --- Sports Analytics Processing ---
+        delta_timeline.append({
+            "timestamp": timestamp,
+            "magnitude": result.get("delta_magnitude", 0.0)
+        })
+
+        persons = [obj for obj in result.get("objects", []) if obj["class_name"] == "person"]
+        frame_h, frame_w = frame.shape[:2]
+        coords = []
+        for p in persons:
+            bbox = p["bbox"] # [x1, y1, x2, y2]
+            x_center = (bbox[0] + bbox[2]) / 2.0
+            y_bottom = bbox[3]
+            coords.append((x_center / frame_w, y_bottom / frame_h))
+            
+        position_timeline.append({
+            "timestamp": timestamp,
+            "positions": coords
+        })
+        
+        player_counts.append({
+            "timestamp": timestamp,
+            "team1": len(persons),
+            "team2": 0
+        })
+        # -----------------------------------
+
+        # 1. Add global frame embedding
+        batch.append({
+            "video_path": video_id,
+            "camera_id":  video_id,
+            "timestamp":  timestamp,
+            "frame_idx":  idx,
+            "embedding":  result["embedding"],
+            "is_anchor":  result["is_anchor"],
+            "text":       obj_metadata,
+        })
+
+        if result["is_anchor"]:
+            anchor_timestamps.append(timestamp)
+
+            # Tiled CLIP Encoding on Anchor Frames (Tiled Encoding / Small Objects)
+            if tiled_encoding:
+                global global_tiled_encoder
+                if global_tiled_encoder is None:
+                    try:
+                        from adve.vision.tiled_encoder import TiledEncoder
+                        global_tiled_encoder = TiledEncoder(
+                            clip_model = pipeline.anchor_proc.clip_model,
+                            clip_prep  = pipeline.anchor_proc.clip_preprocess,
+                            device     = config.DEVICE,
+                        )
+                    except Exception as e:
+                        print(f"Failed to initialize TiledEncoder on demand: {e}")
+                
+                if global_tiled_encoder is not None:
+                    try:
+                        tile_results = global_tiled_encoder.encode_frame(frame, grid="2x2")
+                        for tile in tile_results[1:]: # skip global (already added)
+                            batch.append({
+                                "video_path": video_id,
+                                "camera_id":  f"{video_id} [TILE:{tile['tile_id']}]",
+                                "timestamp":  timestamp,
+                                "frame_idx":  idx,
+                                "embedding":  tile["embedding"],
+                                "is_anchor":  True,
+                            })
+                    except Exception as e:
+                        print(f"Tiled encoding warning: {e}")
+
+        # 2. Add object-level crop embeddings (finding small details!)
+        for obj in result.get("objects", []):
+            batch.append({
+                "video_path": video_id,
+                "camera_id":  f"{video_id} (Object: {obj['class_name']})",
+                "timestamp":  timestamp,
+                "frame_idx":  idx,
+                "embedding":  obj["embedding"],
+                "is_anchor":  result["is_anchor"],
+            })
+
+        if len(batch) >= 500:
+            search_index.add_batch(batch)
+            batch = []
+
+        idx += 1
+        if task_id and task_id in active_tasks and idx % 15 == 0:
+            import psutil
+            import torch
+            elapsed = time.time() - start_time
+            speed = round(idx / elapsed, 1) if elapsed > 0 else 0.0
+            
+            # Calculate ETA
+            eta_str = "Calculating..."
+            if idx > 10 and speed > 0:
+                rem_frames = max(0, total_frames - idx)
+                eta_s = rem_frames / speed
+                if eta_s < 60:
+                    eta_str = f"{int(eta_s)}s"
+                else:
+                    eta_str = f"{int(eta_s // 60)}m {int(eta_s % 60)}s"
+            
+            elapsed_str = f"{int(elapsed)}s" if elapsed < 60 else f"{int(elapsed // 60)}m {int(elapsed % 60)}s"
+
+            vram_alloc = 0.0
+            vram_res = 0.0
+            if torch.cuda.is_available():
+                vram_alloc = round(torch.cuda.memory_allocated() / (1024 * 1024), 1)
+                vram_res = round(torch.cuda.memory_reserved() / (1024 * 1024), 1)
+                
+            active_tasks[task_id]["metrics"] = {
+                "total_frames": total_frames,
+                "processed_frames": processed_count,
+                "skipped_frames": max(0, idx - processed_count),
+                "cpu_usage": psutil.cpu_percent(),
+                "ram_usage": psutil.virtual_memory().percent,
+                "vram_allocated_mb": vram_alloc,
+                "vram_reserved_mb": vram_res,
+                "speed_fps": speed,
+                "elapsed_str": elapsed_str,
+                "eta_str": eta_str
+            }
+            pct = min(99.0, (idx / total_frames) * 100)
+            active_tasks[task_id]["progress"] = round(pct, 1)
+
+    # Check if task was cancelled before ending
+    is_cancelled = False
+    if task_id and task_id in active_tasks:
+        if active_tasks[task_id].get("cancelled"):
+            is_cancelled = True
+            active_tasks.pop(task_id, None)
+
+    if batch and not is_cancelled:
+        search_index.add_batch(batch)
+
+    cap.release()
+    if is_cancelled:
+        print(f"Indexing visual frames for {video_id} cancelled.")
+        return
+
+    search_index.save()
+
+    # Save accumulated sports analytics raw timelines
+    sports_data_path = os.path.join(INDEX_DIR, f"{safe_filename(video_id)}_sports_data.json")
+    try:
+        with open(sports_data_path, "w") as sf:
+            json.dump({
+                "delta_timeline": delta_timeline,
+                "position_timeline": position_timeline,
+                "player_counts": player_counts
+            }, sf)
+        print(f"Saved sports timelines to {sports_data_path}")
+    except Exception as ex:
+        print(f"Failed to save sports timelines: {ex}")
+
+    print(f"Indexed {idx} visual frames from {video_id}")
+
+    # Set status to 100% and ready (so the user doesn't wait for background Whisper/OCR)
+    if task_id and task_id in active_tasks:
+        elapsed = time.time() - start_time
+        elapsed_str = f"{int(elapsed)}s" if elapsed < 60 else f"{int(elapsed // 60)}m {int(elapsed % 60)}s"
+        speed = round(idx / elapsed, 1) if elapsed > 0 else 0.0
+        
+        active_tasks[task_id]["status"] = "Ready to search!"
+        active_tasks[task_id]["progress"] = 100.0
+        active_tasks[task_id]["metrics"] = {
+            "total_frames": total_frames,
+            "processed_frames": processed_count,
+            "skipped_frames": max(0, idx - processed_count),
+            "cpu_usage": 0.0,
+            "ram_usage": 0.0,
+            "vram_allocated_mb": 0.0,
+            "vram_reserved_mb": 0.0,
+            "speed_fps": speed,
+            "elapsed_str": elapsed_str,
+            "eta_str": "Completed"
+        }
+        pass
+
+    # Launch background task for EasyOCR
+    if ocr:
+        threading.Thread(
+            target=ocr_video_async,
+            args=(video_path, video_id, anchor_timestamps),
+            daemon=True
+        ).start()
+
+    # Launch background task for Whisper & AudioIndexer
+    if whisper:
+        threading.Thread(
+            target=transcribe_video_async,
+            args=(video_path, video_id),
+            daemon=True
+        ).start()
+
+
+def index_youtube_task(
+    url: str,
+    task_id: str,
+    tiled_encoding: bool = False,
+    ocr: bool = True,
+    whisper: bool = True,
+    adaptive_fps: bool = True,
+    speed_preset: str = "standard"
+):
+    """Downloads a YouTube video and indexes it in the background."""
+    import yt_dlp
+    
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    
+    def ytdl_hook(d):
+        if d['status'] == 'downloading':
+            total = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
+            downloaded = d.get('downloaded_bytes') or 0
+            pct = (downloaded / total * 100) if total > 0 else 0.0
+            if task_id in active_tasks:
+                active_tasks[task_id]["status"] = "Downloading from YouTube..."
+                active_tasks[task_id]["progress"] = round(pct, 1)
+        elif d['status'] == 'finished':
+            if task_id in active_tasks:
+                active_tasks[task_id]["status"] = "Download finished, starting indexing..."
+                active_tasks[task_id]["progress"] = 100.0
+                
+    opts = {
+        "format": "best[height<=360]/worst[ext=mp4]/best",
+        "outtmpl": os.path.join(UPLOADS_DIR, "%(id)s.%(ext)s"),
+        "quiet": True,
+        "no_warnings": True,
+        "nocheckcertificate": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "web"]
+            }
+        },
+        "progress_hooks": [ytdl_hook]
+    }
+    
+    try:
+        print(f"[YouTube] Downloading video from {url}...")
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            video_id = info["id"]
+            ext = info.get("ext", "mp4")
+            filename = f"{video_id}.{ext}"
+            filepath = os.path.join(UPLOADS_DIR, filename)
+            
+            # Double check path
+            if not os.path.exists(filepath):
+                for file in os.listdir(UPLOADS_DIR):
+                    if file.startswith(video_id):
+                        filepath = os.path.join(UPLOADS_DIR, file)
+                        filename = file
+                        break
+            
+            if os.path.exists(filepath):
+                if task_id in active_tasks:
+                    active_tasks[task_id]["name"] = filename
+                print(f"[YouTube] Downloaded successfully to {filepath}. Starting indexing...")
+                index_video_task(
+                    filepath,
+                    filename,
+                    task_id=task_id,
+                    tiled_encoding=tiled_encoding,
+                    ocr=ocr,
+                    whisper=whisper,
+                    adaptive_fps=adaptive_fps,
+                    speed_preset=speed_preset
+                )
+            else:
+                if task_id in active_tasks:
+                    active_tasks[task_id]["status"] = "Failed: Downloaded file not found"
+                    active_tasks[task_id]["progress"] = 0.0
+    except Exception as e:
+        print(f"[YouTube] Error downloading or indexing {url}: {e}")
+        if task_id in active_tasks:
+            active_tasks[task_id]["status"] = f"Failed: {str(e)[:30]}"
+            active_tasks[task_id]["progress"] = 0.0
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@app.post("/v1/register")
+async def register_user(request: RegisterRequest):
+    """Registers a new user (First User) and returns a unique live API key."""
+    import sqlite3
+    import secrets
+    
+    api_key = f"adve_live_{secrets.token_hex(16)}"
+    db = sqlite3.connect(os.path.join(INDEX_DIR, "metadata.db"))
+    try:
+        db.execute(
+            "INSERT INTO users VALUES (NULL, ?, ?, ?, ?)",
+            (request.name, request.email, api_key, time.time())
+        )
+        db.commit()
+    except sqlite3.IntegrityError:
+        # Email already exists, return the existing user's key
+        row = db.execute("SELECT api_key FROM users WHERE email=?", (request.email,)).fetchone()
+        if row:
+            api_key = row[0]
+        else:
+            raise HTTPException(status_code=400, detail="Email already registered, registration failed.")
+    finally:
+        db.close()
+        
+    return {"status": "success", "api_key": api_key}
+
+
+@app.post("/v1/index/video")
+async def index_video(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    tiled_encoding: bool = False,
+    ocr: bool = True,
+    whisper: bool = True,
+    adaptive_fps: bool = True,
+    speed_preset: str = "standard"
+):
+    """Upload and index a video file. Returns immediately, indexes in background."""
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    # file.filename is attacker-controlled: unsanitised, "../../evil.sh" would
+    # write outside UPLOADS_DIR. Derive one safe name and use it everywhere so
+    # the stored file, the task id and the returned video_id all agree.
+    safe_name = safe_filename(file.filename)
+    dest = os.path.join(UPLOADS_DIR, safe_name)
+
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    task_id = f"upload_{int(time.time())}_{safe_name}"
+    active_tasks[task_id] = {
+        "name": safe_name,
+        "status": "Starting upload...",
+        "progress": 0.0
+    }
+
+    background_tasks.add_task(
+        index_video_task,
+        dest,
+        safe_name,
+        task_id,
+        tiled_encoding,
+        ocr,
+        whisper,
+        adaptive_fps,
+        speed_preset
+    )
+
+    return {
+        "status":   "indexing_started",
+        "video_id": safe_name,
+        "task_id":  task_id,
+        "message":  "Indexing running in background. Use /v1/stats to monitor."
+    }
+
+
+@app.post("/v1/index/youtube")
+async def index_youtube(
+    request: YouTubeIndexRequest,
+    background_tasks: BackgroundTasks
+):
+    """Index a YouTube video directly from a URL. Downloads and indexes in background."""
+    task_id = f"youtube_{int(time.time())}"
+    active_tasks[task_id] = {
+        "name": request.url.split("watch?v=")[-1][:15],
+        "status": "Queued for download...",
+        "progress": 0.0
+    }
+    background_tasks.add_task(
+        index_youtube_task,
+        request.url,
+        task_id,
+        request.tiled_encoding,
+        request.ocr,
+        request.whisper,
+        request.adaptive_fps,
+        request.speed_preset
+    )
+    return {
+        "status":   "indexing_started",
+        "task_id":  task_id,
+        "message":  "YouTube download and indexing running in background. Use /v1/stats to monitor."
+    }
+
+
+@app.post("/v1/index/stream")
+async def add_stream(request: StreamRequest):
+    """Connect a live RTSP camera stream."""
+    try:
+        camera_mgr.add_camera(request.camera_id, request.rtsp_url)
+        return {"status": "connected", "camera_id": request.camera_id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/v1/search/text")
+async def search_text(request: TextSearchRequest):
+    """Search video content using a natural language query."""
+    start_time = time.time()
+    query_k = max(request.k * 20, 500) if request.anchor_only else max(request.k * 5, 100)
+    raw_results = search_index.search_by_text(request.query, k=query_k)
+    
+    scene_matches = []
+    for r in raw_results:
+        if "[AUDIO]" in r.camera_id or "Speech:" in r.camera_id:
+            continue
+        if "(Object:" in r.camera_id:
+            continue
+        scene_matches.append(r)
+
+    # Group matches by (video_path, frame_idx) to retain only the highest similarity
+    from adve.search.index import normalize_video_path
+    frames_dict = {}
+    for r in scene_matches:
+        key = (normalize_video_path(r.video_path), r.frame_idx)
+        if key not in frames_dict:
+            frames_dict[key] = r
+        else:
+            if r.similarity > frames_dict[key].similarity:
+                frames_dict[key] = r
+
+    visual_results = list(frames_dict.values())
+    for r in visual_results:
+        if r.objects is None:
+            r.objects = []
+    
+    # 1. Filter by camera_id
+    if request.camera_id:
+        norm_filter = normalize_video_path(request.camera_id)
+        filtered = []
+        for r in visual_results:
+            r_norm_path = normalize_video_path(r.video_path)
+            r_norm_cam = normalize_video_path(r.camera_id) if '/' in r.camera_id or '\\' in r.camera_id or '.' in r.camera_id else None
+            
+            if (r.camera_id == request.camera_id or 
+                r_norm_path == norm_filter or 
+                (r_norm_cam is not None and r_norm_cam == norm_filter) or
+                os.path.basename(r.video_path) == request.camera_id or
+                os.path.basename(r.video_path) == os.path.basename(request.camera_id)):
+                filtered.append(r)
+        visual_results = filtered
+        
+    # 2. Filter by anchor_only
+    if request.anchor_only:
+        visual_results = [r for r in visual_results if r.is_anchor]
+
+    # Query audio results using AudioIndexer
+    audio_results = []
+    if global_audio_indexer is not None:
+        if request.camera_id:
+            # Query only the requested video
+            audio_results = global_audio_indexer.search(request.query, video_id=request.camera_id, k=query_k)
+        else:
+            # Query all indexed videos
+            videos = [v["video_path"] for v in search_index.stats()["indexed_videos"]]
+            unique_videos = list(set(videos))
+            for v_id in unique_videos:
+                audio_results.extend(global_audio_indexer.search(request.query, video_id=v_id, k=query_k))
+
+    # Merge visual and audio results
+    min_gap = 8.0 if request.temporal_dedup else 0.0
+    from adve.audio.multimodal_search import merge_results
+    merged = merge_results(visual_results, audio_results, min_gap=min_gap, top_k=request.k)
+
+    # 3. Filter by similarity threshold
+    if request.min_similarity > 0.0:
+        merged = [r for r in merged if r.similarity >= request.min_similarity]
+
+    results = []
+    for r in merged:
+        if r.source == "audio":
+            camera_id = f"{r.video_path} (Speech: \"{r.text}\")"
+        elif r.source == "both":
+            camera_id = f"{r.video_path} (Speech: \"{r.text}\")"
+        else:
+            camera_id = getattr(r, "camera_id", r.video_path)
+
+        frame_idx = getattr(r, "frame_idx", 0)
+        if frame_idx == 0 and r.timestamp > 0:
+            frame_idx = int(r.timestamp * 30)
+
+        results.append(
+            SearchResult(
+                video_path = r.video_path,
+                camera_id  = camera_id,
+                timestamp  = r.timestamp,
+                frame_idx  = frame_idx,
+                similarity = r.similarity,
+                is_anchor  = r.is_anchor,
+                source     = r.source,
+                text       = r.text,
+                objects    = getattr(r, "objects", []),
+            )
+        )
+
+    # ── Confidence gate ─────────────────────────────────────────────────────
+    # Reject results whose best similarity is below a hard floor so callers
+    # never receive confidently-wrong answers for absent queries.
+    WEAK_THRESHOLD = 0.22
+    if results and results[0].similarity < WEAK_THRESHOLD:
+        results = []
+
+    # Calculate computation metrics
+    import psutil
+    import torch
+    duration_ms = round((time.time() - start_time) * 1000.0, 1)
+    vram_alloc = 0.0
+    if torch.cuda.is_available():
+        vram_alloc = round(torch.cuda.memory_allocated() / (1024 * 1024), 1)
+
+    headers = {
+        "X-Computation-Time-Ms": str(duration_ms),
+        "X-Computation-CPU-Percent": str(psutil.cpu_percent()),
+        "X-Computation-RAM-Percent": str(psutil.virtual_memory().percent),
+        "X-Computation-VRAM-Allocated-MB": str(vram_alloc),
+    }
+
+    from fastapi.encoders import jsonable_encoder
+    return JSONResponse(content=jsonable_encoder(results[:request.k]), headers=headers)
+
+
+@app.post("/v1/search/image")
+async def search_image(
+    file: UploadFile = File(...),
+    k: int = 10,
+    camera_id: Optional[str] = None,
+    anchor_only: Optional[bool] = False,
+    min_similarity: Optional[float] = 0.0,
+    temporal_dedup: Optional[bool] = True
+):
+    """Search for similar scenes using an image."""
+    start_time = time.time()
+    import cv2
+    import numpy as np
+
+    contents = await file.read()
+    arr = np.frombuffer(contents, np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+    query_k = max(k * 20, 500) if anchor_only else max(k * 5, 100)
+    results = search_index.search_by_image(img, k=query_k)
+    
+    # 1. Filter by camera_id
+    if camera_id:
+        from adve.search.index import normalize_video_path
+        norm_filter = normalize_video_path(camera_id)
+        filtered = []
+        for r in results:
+            r_norm_path = normalize_video_path(r.video_path)
+            r_norm_cam = normalize_video_path(r.camera_id) if '/' in r.camera_id or '\\' in r.camera_id or '.' in r.camera_id else None
+            
+            if (r.camera_id == camera_id or 
+                r_norm_path == norm_filter or 
+                (r_norm_cam is not None and r_norm_cam == norm_filter) or
+                os.path.basename(r.video_path) == camera_id or
+                os.path.basename(r.video_path) == os.path.basename(camera_id)):
+                filtered.append(r)
+        results = filtered
+
+    # 2. Filter by anchor_only
+    if anchor_only:
+        results = [r for r in results if r.is_anchor]
+
+    # 3. Filter by similarity threshold
+    if min_similarity > 0.0:
+        results = [r for r in results if r.similarity >= min_similarity]
+
+    # 4. Temporal deduplication
+    if temporal_dedup:
+        deduped = []
+        for r in results:
+            if not any(
+                r.video_path == accepted.video_path and abs(r.timestamp - accepted.timestamp) < 8.0 
+                for accepted in deduped
+            ):
+                deduped.append(r)
+        results = deduped
+
+    res_list = [
+        SearchResult(
+            video_path = r.video_path,
+            camera_id  = r.camera_id,
+            timestamp  = r.timestamp,
+            frame_idx  = r.frame_idx,
+            similarity = r.similarity,
+            is_anchor  = r.is_anchor,
+        )
+        for r in results[:k]
+    ]
+
+    # Calculate computation metrics
+    import psutil
+    import torch
+    duration_ms = round((time.time() - start_time) * 1000.0, 1)
+    vram_alloc = 0.0
+    if torch.cuda.is_available():
+        vram_alloc = round(torch.cuda.memory_allocated() / (1024 * 1024), 1)
+
+    headers = {
+        "X-Computation-Time-Ms": str(duration_ms),
+        "X-Computation-CPU-Percent": str(psutil.cpu_percent()),
+        "X-Computation-RAM-Percent": str(psutil.virtual_memory().percent),
+        "X-Computation-VRAM-Allocated-MB": str(vram_alloc),
+    }
+
+    from fastapi.encoders import jsonable_encoder
+    return JSONResponse(content=jsonable_encoder(res_list), headers=headers)
+
+
+@app.post("/v1/chat")
+async def chat_rag(request: ChatRequest):
+    """Conversational Video RAG Chatbot using Groq."""
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="GROQ_API_KEY environment variable is missing on the server."
+        )
+
+    # 1. Search database specifically for the question to get context
+    raw_results = search_index.search_by_text(request.question, k=15)
+    
+    # 2. Filter results to the active video / camera_id if specified
+    from adve.search.index import normalize_video_path
+    video_results = raw_results
+    if request.camera_id:
+        norm_filter = normalize_video_path(request.camera_id)
+        video_results = [
+            r for r in raw_results 
+            if normalize_video_path(r.video_path) == norm_filter or 
+               r.camera_id == request.camera_id or 
+               os.path.basename(r.video_path) == os.path.basename(request.camera_id)
+        ]
+    
+    # 3. Deduplicate temporally (at least 8.0 seconds apart)
+    deduped_results = []
+    for r in video_results:
+        if not any(abs(r.timestamp - accepted.timestamp) < 8.0 for accepted in deduped_results):
+            deduped_results.append(r)
+            
+    # 4. Slice to top 3 for Groq context
+    rag_context_results = deduped_results[:3]
+    
+    if not rag_context_results:
+        return {"response": "No relevant moments or transcripts found in the video to answer this question."}
+        
+    try:
+        import base64
+        import cv2
+        from groq import Groq
+        client = Groq(api_key=api_key)
+        
+        # Build prior history text
+        history_context = ""
+        if request.history:
+            history_context = "Here is the conversation history so far for context:\n"
+            for item in request.history:
+                if isinstance(item, dict):
+                    role = item.get("role", "user")
+                    content = item.get("content", "")
+                    history_context += f"{role.capitalize()}: {content}\n"
+            history_context += "\n"
+
+        prompt_text = (
+            f"You are an AI Video RAG Chatbot. Answer the user's current question based on the retrieved video context "
+            f"and the conversation history.\n\n"
+            f"{history_context}"
+            f"Current User Question: '{request.question}'\n\n"
+            f"Use the following retrieved frame images and spoken transcripts to formulate your answer. "
+            f"Provide timestamps (e.g. [12.5s]) in your response when referencing specific moments."
+        )
+
+        prompt_content = [
+            {
+                "type": "text", 
+                "text": prompt_text
+            }
+        ]
+        
+        for i, r in enumerate(rag_context_results):
+            w_start = max(0.0, r.timestamp - 5.0)
+            w_end = r.timestamp + 10.0
+            
+            transcript_text = ""
+            try:
+                cursor = search_index.db.execute(
+                    "SELECT timestamp, text FROM transcripts WHERE video_path = ? AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp ASC",
+                    (r.video_path, w_start, w_end)
+                )
+                rows = cursor.fetchall()
+                if rows:
+                    transcript_text = " ".join([f"[{ts:.1f}s] {text}" for ts, text in rows])
+                else:
+                    transcript_text = "(No spoken audio detected in this window)"
+            except Exception as e:
+                print(f"[Chat RAG] Error querying transcripts: {e}")
+                transcript_text = "(Error retrieving transcripts)"
+
+            cap = cv2.VideoCapture(r.video_path)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, r.frame_idx)
+            ret, frame = cap.read()
+            cap.release()
+            
+            if ret:
+                # Resize frame to a max width of 600px to optimize API payload
+                h, w = frame.shape[:2]
+                if w > 600:
+                    scale = 600 / w
+                    frame = cv2.resize(frame, (600, int(h * scale)))
+                    
+                _, buf = cv2.imencode(".jpg", frame)
+                b64 = base64.b64encode(buf).decode()
+                
+                prompt_content.append({
+                    "type": "text",
+                    "text": (
+                        f"--- Scene Chunk {i+1} at timestamp {r.timestamp:.1f}s (match score: {r.similarity * 100:.1f}%) ---\n"
+                        f"Spoken Dialogue Transcript: \"{transcript_text}\""
+                    )
+                })
+                prompt_content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{b64}"
+                    }
+                })
+                
+        prompt_content.append({
+            "type": "text",
+            "text": "Analyze both the visual details in the frames and the spoken dialogue transcripts to answer the user's question accurately."
+        })
+        
+        print("[Chat RAG] Sending multi-modal query to Groq Llama 3.2 Vision...")
+        response = client.chat.completions.create(
+            model=os.environ.get("GROQ_VISION_MODEL",
+                                 "meta-llama/llama-4-scout-17b-16e-instruct"),
+            messages=[{"role": "user", "content": prompt_content}],
+            max_tokens=400,
+            temperature=0.2
+        )
+        return {"response": response.choices[0].message.content}
+    except Exception as e:
+        return {"response": f"Error querying Groq Llama 3.2 Vision: {e}"}
+
+
+@app.get("/v1/stats")
+async def get_stats():
+    return {
+        "index":   search_index.stats(),
+        "cameras": camera_mgr.status(),
+        "active_tasks": active_tasks
+    }
+
+
+@app.post("/v1/tasks/{task_id}/pause")
+async def pause_task(task_id: str):
+    if task_id not in active_tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    active_tasks[task_id]["paused"] = True
+    active_tasks[task_id]["status"] = "Paused"
+    return {"status": "success", "message": "Task paused"}
+
+
+@app.post("/v1/tasks/{task_id}/resume")
+async def resume_task(task_id: str):
+    if task_id not in active_tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    active_tasks[task_id]["paused"] = False
+    active_tasks[task_id]["status"] = "Indexing visual frames..."
+    return {"status": "success", "message": "Task resumed"}
+
+
+@app.post("/v1/tasks/{task_id}/cancel")
+async def cancel_task(task_id: str):
+    if task_id not in active_tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    active_tasks[task_id]["cancelled"] = True
+    active_tasks[task_id]["status"] = "Cancelling..."
+    return {"status": "success", "message": "Task cancellation initiated"}
+
+
+@app.post("/v1/tasks/{task_id}/dismiss")
+async def dismiss_task(task_id: str):
+    active_tasks.pop(task_id, None)
+    return {"status": "success", "message": "Task dismissed"}
+
+
+@app.get("/", response_class=HTMLResponse)
+async def get_landing():
+    html_path = os.path.join(os.path.dirname(__file__), "landing.html")
+    if not os.path.exists(html_path):
+        return "<h3>ADVE Product Landing Page (landing.html) not found!</h3>"
+    with open(html_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def get_dashboard():
+    html_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
+    if not os.path.exists(html_path):
+        return "<h3>ADVE Dashboard (dashboard.html) not found!</h3>"
+    with open(html_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@functools.lru_cache(maxsize=256)
+def read_frame_cached(video_path: str, frame_idx: int) -> Optional[bytes]:
+    import cv2
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return None
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+    ret, frame = cap.read()
+    cap.release()
+    if not ret:
+        return None
+    _, buffer = cv2.imencode(".jpg", frame)
+    return buffer.tobytes()
+
+
+@app.get("/v1/frame")
+async def get_frame(video_id: str, frame_idx: int):
+    # resolve_media() confines the lookup to MEDIA_ROOTS and to video
+    # extensions. Previously `video_id` was used as a path directly, so any
+    # readable file could be exfiltrated (frame_idx=-1 streamed it whole).
+    video_path = resolve_media(video_id)
+    if video_path is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Video file not found: {safe_filename(video_id)}",
+        )
+
+    if frame_idx == -1:
+        from fastapi.responses import FileResponse
+        return FileResponse(video_path, media_type="video/mp4")
+
+    buffer_bytes = read_frame_cached(video_path, frame_idx)
+    if buffer_bytes is None:
+        raise HTTPException(status_code=400, detail=f"Could not read frame {frame_idx}")
+        
+    return Response(content=buffer_bytes, media_type="image/jpeg")
+
+
+@app.post("/v1/sports/analytics")
+async def run_sports_analytics(
+    video_id: str,
+    player_filter: str = "All Players",
+    colormap: str = "Jet"
+):
+    sports_data_path = os.path.join(INDEX_DIR, f"{safe_filename(video_id)}_sports_data.json")
+    if not os.path.exists(sports_data_path):
+        raise HTTPException(status_code=404, detail="Sports timeline data not found. Please index the video first.")
+        
+    with open(sports_data_path, "r", encoding="utf-8") as sf:
+        sports_data = json.load(sf)
+        
+    delta_timeline = sports_data.get("delta_timeline", [])
+    position_timeline = sports_data.get("position_timeline", [])
+    player_counts = sports_data.get("player_counts", [])
+    
+    # 1. Event Detection
+    detector = SportsEventDetector()
+    events = detector.detect_from_timeline(delta_timeline, player_counts)
+    
+    events_list = []
+    for e in events:
+        events_list.append({
+            "timestamp": e.timestamp,
+            "event_type": e.event_type,
+            "confidence": e.confidence,
+            "description": e.description,
+            "delta_mag": e.delta_mag
+        })
+        
+    # 2. Formation Tracking
+    tracker = FormationTracker()
+    formations = tracker.track_over_match(position_timeline, min_duration_sec=30.0)
+    
+    # If no duration-based formations found, get global
+    if not formations:
+        all_positions = []
+        for f in position_timeline:
+            all_positions.extend(f["positions"])
+        if all_positions:
+            global_snap = tracker.classify(all_positions)
+            formations = [{
+                "formation": global_snap.formation,
+                "start_time": 0.0,
+                "end_time": position_timeline[-1]["timestamp"] if position_timeline else 0.0,
+                "duration": position_timeline[-1]["timestamp"] if position_timeline else 0.0,
+                "confidence": global_snap.confidence
+            }]
+            
+    # 3. Heatmap Generation
+    heatmap_gen = PlayerHeatmap()
+    all_positions = []
+    for f in position_timeline:
+        positions = f["positions"]
+        if player_filter == "Left Side Attackers":
+            positions = [p for p in positions if p[0] < 0.5 and p[1] > 0.5]
+        elif player_filter == "Right Side Attackers":
+            positions = [p for p in positions if p[0] > 0.5 and p[1] > 0.5]
+        elif player_filter == "Defenders Only":
+            positions = [p for p in positions if p[1] < 0.4]
+        all_positions.extend(positions)
+        
+    cmap = cv2.COLORMAP_JET
+    if colormap == "Viridis":
+        cmap = cv2.COLORMAP_VIRIDIS
+    elif colormap == "Hot":
+        cmap = cv2.COLORMAP_HOT
+    elif colormap == "Inferno":
+        cmap = cv2.COLORMAP_INFERNO
+        
+    heatmap_img = heatmap_gen.generate(all_positions, player_name=player_filter, colormap=cmap)
+    
+    clean_vid_id = os.path.basename(video_id.replace("\\", "/"))
+    heatmap_out_path = os.path.join(INDEX_DIR, f"{clean_vid_id}_heatmap.jpg")
+    cv2.imwrite(heatmap_out_path, heatmap_img)
+    
+    # 4. Highlight Generation
+    basename = os.path.basename(video_id.replace("\\", "/"))
+    video_path = video_id if os.path.exists(video_id) else os.path.join(UPLOADS_DIR, basename)
+    if not os.path.exists(video_path):
+        for folder in ["demo_videos", "demo_data/videos", "adve_v2/demo_videos", "adve_v2/demo_data/videos"]:
+            candidate = os.path.join(folder, basename)
+            if os.path.exists(candidate):
+                video_path = candidate
+                break
+                
+    highlight_out_path = os.path.join(INDEX_DIR, f"{clean_vid_id}_highlights.mp4")
+    if os.path.exists(highlight_out_path):
+        try:
+            os.unlink(highlight_out_path)
+        except Exception:
+            pass
+            
+    generator = HighlightGenerator()
+    has_highlights = False
+    if os.path.exists(video_path):
+        try:
+            out = generator.generate(
+                video_path,
+                delta_timeline,
+                events,
+                output_path=highlight_out_path,
+                top_n=5
+            )
+            has_highlights = bool(out and os.path.exists(highlight_out_path))
+        except Exception as ex:
+            print(f"Failed to generate highlights in API: {ex}")
+            
+    return {
+        "status": "success",
+        "video_id": video_id,
+        "events": events_list,
+        "formations": formations,
+        "heatmap_url": f"/v1/sports/heatmap?video_id={video_id}",
+        "highlights_url": f"/v1/sports/highlights?video_id={video_id}" if has_highlights else None
+    }
+
+
+@app.get("/v1/sports/heatmap")
+async def get_sports_heatmap(video_id: str):
+    clean_vid_id = os.path.basename(video_id.replace("\\", "/"))
+    heatmap_path = os.path.join(INDEX_DIR, f"{clean_vid_id}_heatmap.jpg")
+    if not os.path.exists(heatmap_path):
+        raise HTTPException(status_code=404, detail="Heatmap not generated yet.")
+    return FileResponse(heatmap_path, media_type="image/jpeg")
+
+
+@app.get("/v1/sports/highlights")
+async def get_sports_highlights(video_id: str):
+    clean_vid_id = os.path.basename(video_id.replace("\\", "/"))
+    highlights_path = os.path.join(INDEX_DIR, f"{clean_vid_id}_highlights.mp4")
+    if not os.path.exists(highlights_path):
+        raise HTTPException(status_code=404, detail="Highlights reel not generated yet.")
+    return FileResponse(highlights_path, media_type="video/mp4")
+
+
+# ── Enterprise v3.1 Endpoints ───────────────────────────────────────────────
+
+from fastapi import Header
+from adve.api.license import validate_license_key
+
+@app.get("/health")
+@app.get("/api/v1/health")
+@app.get("/v1/health")
+async def health(response: Response):
+    import shutil
+    import torch
+    from fastapi import status
+
+    cuda_ok = torch.cuda.is_available()
+    cuda_responsive = False
+    if cuda_ok:
+        try:
+            _ = torch.zeros(1).cuda()
+            cuda_responsive = True
+        except Exception:
+            cuda_responsive = False
+
+    # Check Vector DB / Metadata DB ping
+    db_ok = False
+    try:
+        if search_index and search_index.db:
+            cursor = search_index.db.cursor()
+            cursor.execute("SELECT 1")
+            db_ok = (cursor.fetchone()[0] == 1)
+    except Exception:
+        db_ok = False
+
+    # Check free disk space (> 2GB free)
+    disk_free_gb = 0.0
+    try:
+        total, used, free = shutil.disk_usage(DATA_DIR)
+        disk_free_gb = free / (1024 ** 3)
+    except Exception:
+        disk_free_gb = 10.0
+
+    disk_ok = disk_free_gb >= 2.0
+    all_healthy = db_ok and disk_ok
+
+    status_str = "healthy" if all_healthy else "degraded"
+    if not all_healthy:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    return {
+        "status": status_str,
+        "version": "3.1.0",
+        "timestamp": time.time(),
+        "subsystems": {
+            "cuda_available": cuda_ok,
+            "cuda_responsive": cuda_responsive,
+            "metadata_db_ping": db_ok,
+            "disk_free_gb": round(disk_free_gb, 2),
+            "disk_healthy": disk_ok
+        }
+    }
+
+@app.post("/api/v1/license/validate")
+async def api_validate_license(x_license_key: Optional[str] = Header(None)):
+    result = validate_license_key(x_license_key)
+    if not result["valid"]:
+        raise HTTPException(status_code=result.get("status_code", 401), detail=result["error"])
+    return result
+
+def run():
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)
+
+
+if __name__ == "__main__":
+    run()
+

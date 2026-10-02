@@ -1,0 +1,43 @@
+{
+  "video": "..\\dataset_lectures\\video\\computer_vision_2_2_high_res.mp4",
+  "frames_analyzed": 400,
+  "duration_sec": 2085.1666666666665,
+  "budget": 80,
+  "k": 5,
+  "n_queries": 20,
+  "text_weight": 1.0,
+  "text_observations": 400,
+  "text_observations_nonempty": 400,
+  "text_changes_detected": 20,
+  "full": {
+    "name": "reference_full",
+    "model_calls": 400,
+    "hit_at_k": 0.45,
+    "precision_at_k": 0.45,
+    "n_queries": 20
+  },
+  "uniform": {
+    "name": "uniform",
+    "model_calls": 86,
+    "hit_at_k": 0.5,
+    "precision_at_k": 0.35,
+    "n_queries": 20
+  },
+  "router": {
+    "name": "router",
+    "model_calls": 86,
+    "hit_at_k": 0.55,
+    "precision_at_k": 0.31,
+    "n_queries": 20
+  },
+  "router_text": {
+    "name": "router_text",
+    "model_calls": 85,
+    "hit_at_k": 0.55,
+    "precision_at_k": 0.31,
+    "n_queries": 20
+  },
+  "router_vs_uniform": 0.05,
+  "text_vs_uniform": 0.05,
+  "text_vs_router": 0.0
+}

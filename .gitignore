@@ -45,3 +45,13 @@ outputs/adve_state.db
 adve_v2/adve_v2/data/auth.db
 adve_v2/data/truth_verification_index/
 *.faiss.bak
+
+.pytest_cache/
+
+# Archived v2 working data: source media, FAISS indexes, bundled binaries.
+# GitHub rejects any file over 100 MB, and git history keeps blobs forever -
+# deleting them in a later commit does not shrink the repo.
+archive/**/data/
+*.faiss
+*.faiss.bak
+*.exe

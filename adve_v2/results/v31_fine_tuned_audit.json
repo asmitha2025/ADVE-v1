@@ -1,9 +1,0 @@
-{
-  "model_version": "ADVE v3.1 Fine-Tuned",
-  "audit_score": 86.9,
-  "mean_cos_sim": 0.9776,
-  "min_cos_sim": 0.8679,
-  "p5_cos_sim": 0.9274,
-  "temporal_std": 0.0158,
-  "encoder_savings_pct": 64.7
-}

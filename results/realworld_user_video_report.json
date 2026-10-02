@@ -1,0 +1,18 @@
+{
+  "client_name": "Real World User Video Test",
+  "video_path": "..\\Testing videos\\WhatsApp Video 2026-07-28 at 7.53.33 PM.mp4",
+  "verdict": "[WARN] NEEDS DOMAIN CUSTOMIZATION",
+  "metrics": {
+    "mean_cosine_sim": 0.9892,
+    "min_cosine_sim": 0.9253,
+    "p5_cosine_sim": 0.9645,
+    "encoder_savings_pct": 49.0,
+    "effective_fps": 3.3,
+    "processing_time_sec": 30.64
+  },
+  "acceptance_checks": {
+    "mean_sim_gte_0_97": true,
+    "min_sim_gte_0_85": true,
+    "savings_gte_60pct": false
+  }
+}

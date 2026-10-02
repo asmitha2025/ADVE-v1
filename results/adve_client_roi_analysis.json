@@ -1,0 +1,52 @@
+[
+  {
+    "num_cameras": 10,
+    "standard_gpus_needed": 2,
+    "adve_gpus_needed": 1,
+    "gpus_saved": 1,
+    "standard_annual_cost_usd": 9215.52,
+    "adve_annual_cost_usd": 4607.76,
+    "annual_savings_usd": 4607.76,
+    "savings_pct": 50.0
+  },
+  {
+    "num_cameras": 50,
+    "standard_gpus_needed": 10,
+    "adve_gpus_needed": 5,
+    "gpus_saved": 5,
+    "standard_annual_cost_usd": 46077.6,
+    "adve_annual_cost_usd": 23038.8,
+    "annual_savings_usd": 23038.8,
+    "savings_pct": 50.0
+  },
+  {
+    "num_cameras": 100,
+    "standard_gpus_needed": 20,
+    "adve_gpus_needed": 9,
+    "gpus_saved": 11,
+    "standard_annual_cost_usd": 92155.2,
+    "adve_annual_cost_usd": 41469.84,
+    "annual_savings_usd": 50685.36,
+    "savings_pct": 55.0
+  },
+  {
+    "num_cameras": 500,
+    "standard_gpus_needed": 100,
+    "adve_gpus_needed": 42,
+    "gpus_saved": 58,
+    "standard_annual_cost_usd": 460776.0,
+    "adve_annual_cost_usd": 193525.92,
+    "annual_savings_usd": 267250.08,
+    "savings_pct": 58.0
+  },
+  {
+    "num_cameras": 1000,
+    "standard_gpus_needed": 200,
+    "adve_gpus_needed": 84,
+    "gpus_saved": 116,
+    "standard_annual_cost_usd": 921552.0,
+    "adve_annual_cost_usd": 387051.84,
+    "annual_savings_usd": 534500.16,
+    "savings_pct": 58.0
+  }
+]

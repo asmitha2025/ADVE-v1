@@ -1,0 +1,51 @@
+{
+  "overall_score": 81.7,
+  "verdict": "ACCEPTABLE",
+  "critical_fails": 0,
+  "metrics": {
+    "mean_cosine_sim": 0.9886,
+    "min_cosine_sim": 0.8928,
+    "p5_cosine_sim": 0.9605,
+    "encoder_savings_pct": 68.83,
+    "effective_fps": 3.0,
+    "temporal_consistency_std": 0.0156
+  },
+  "per_video_breakdown": [
+    {
+      "name": "MOT17-02-SDP-raw",
+      "domain": "urban_surveillance",
+      "mean_sim": 0.9882,
+      "min_sim": 0.9054,
+      "p5_sim": 0.9252,
+      "savings": 72.0,
+      "fps": 1.5
+    },
+    {
+      "name": "benchmark_test",
+      "domain": "retail_indoor",
+      "mean_sim": 0.9857,
+      "min_sim": 0.9285,
+      "p5_sim": 0.9652,
+      "savings": 66.67,
+      "fps": 2.7
+    },
+    {
+      "name": "demo_clip_1bqQHEbVlFc",
+      "domain": "urban_surveillance",
+      "mean_sim": 0.9883,
+      "min_sim": 0.8928,
+      "p5_sim": 0.9525,
+      "savings": 69.33,
+      "fps": 3.9
+    },
+    {
+      "name": "demo_clip_5sLYAQS9sWQ",
+      "domain": "traffic_monitoring",
+      "mean_sim": 0.9923,
+      "min_sim": 0.9651,
+      "p5_sim": 0.9783,
+      "savings": 67.33,
+      "fps": 3.9
+    }
+  ]
+}
